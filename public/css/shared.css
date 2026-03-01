@@ -1,0 +1,99 @@
+/* === MTG Commander Arena — Shared Styles === */
+:root {
+    --bg: #121212;
+    --panel: #1e1e1e;
+    --surface: #252525;
+    --border: #333;
+    --accent: #61afef;
+    --accent-glow: rgba(97, 175, 239, 0.15);
+    --green: #98c379;
+    --purple: #c678dd;
+    --red: #e06c75;
+    --gold: #e5c07b;
+    --text: #eee;
+    --text-muted: #888;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* --- Buttons --- */
+button, .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 10px 18px;
+    border: 1px solid #444; border-radius: 6px;
+    background: #2a2a2a; color: var(--text);
+    font-family: var(--font); font-size: 0.95em; font-weight: 600;
+    cursor: pointer; transition: all 0.2s ease;
+    text-decoration: none;
+}
+button:hover, .btn:hover { background: #3a3a3a; border-color: #555; }
+button:active, .btn:active { transform: scale(0.97); }
+
+.btn-primary { background: var(--accent); color: #111; border-color: var(--accent); }
+.btn-primary:hover { background: #7bbff5; border-color: #7bbff5; }
+
+.btn-green { background: var(--green); color: #111; border-color: var(--green); }
+.btn-green:hover { background: #aed89a; border-color: #aed89a; }
+
+.btn-purple { background: var(--purple); color: #111; border-color: var(--purple); }
+.btn-purple:hover { background: #d69de6; border-color: #d69de6; }
+
+.btn-danger { background: var(--red); color: #fff; border-color: var(--red); }
+.btn-danger:hover { background: #e8878e; border-color: #e8878e; }
+
+.btn-block { width: 100%; }
+
+/* --- Inputs --- */
+input[type="text"], input[type="number"], input[type="url"], select {
+    width: 100%; padding: 10px 12px;
+    background: #2a2a2a; border: 1px solid #444; border-radius: 6px;
+    color: var(--text); font-family: var(--font); font-size: 0.95em;
+    transition: border-color 0.2s;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+/* --- Nav Bar --- */
+.nav-bar {
+    height: 48px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 20px;
+    z-index: 100; flex-shrink: 0;
+}
+.nav-bar .brand { font-weight: 700; font-size: 1.1em; color: var(--accent); }
+.nav-bar a { color: var(--text-muted); font-size: 0.9em; transition: color 0.2s; }
+.nav-bar a:hover { color: var(--text); text-decoration: none; }
+.nav-bar a.active { color: var(--accent); }
+
+/* --- Loading overlay --- */
+.loading-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 5000;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--text);
+}
+.loading-overlay.visible { display: flex; }
+
+.spinner {
+    width: 48px; height: 48px;
+    border: 4px solid #333; border-top: 4px solid var(--accent);
+    border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.progress-container {
+    width: 60%; max-width: 500px; height: 16px;
+    background: #333; border-radius: 8px; overflow: hidden; margin: 12px 0;
+}
+.progress-bar {
+    height: 100%; background: var(--green); width: 0%;
+    transition: width 0.3s ease; border-radius: 8px;
+}

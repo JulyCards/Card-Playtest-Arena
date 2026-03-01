@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MTG Arena (LAN)</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root {
+            --card-w: 120px;
+            --card-h: 168px;
+            --bg-color: #111;
+            --accent: #4a90e2;
+        }
+
+        /* RESET & BODY */
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--bg-color);
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- LOADING OVERLAY --- */
+        #loadingOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 5000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #333;
+            border-top: 5px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* --- TOP BAR --- */
+        .top-bar {
+            height: 40px;
+            background: #222;
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            gap: 15px;
+            z-index: 100;
+            flex-shrink: 0;
+        }
+
+        /* --- MAIN SPLIT CONTAINER --- */
+        .split-container {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            overflow: hidden;
+            position: relative;
+            height: 100%;
+            min-height: 0;
+            padding-bottom: calc(var(--card-h) + 25px);
+            box-sizing: border-box;
+        }
+
+        /* --- VIEWPORT --- */
+        .viewport {
+            flex: 1;
+            width: 50%;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 2px solid #000;
+            background: #1a1a1a;
+            height: 100%;
+        }
+
+        .viewport:last-child {
+            border-right: none;
+        }
+
+        .tab-bar {
+            display: flex;
+            background: #111;
+            border-bottom: 1px solid #333;
+            height: 35px;
+            align-items: flex-end;
+            padding: 0 5px;
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            background: #222;
+            border: 1px solid #444;
+            border-bottom: none;
+            color: #888;
+            padding: 5px 15px;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            margin-right: 2px;
+            font-size: 0.9em;
+        }
+
+        .tab-btn.active {
+            background: #333;
+            color: var(--accent);
+            border-top: 2px solid var(--accent);
+            font-weight: bold;
+        }
+
+        .tab-btn:hover {
+            background: #333;
+        }
+
+        .board-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            background: #252525;
+            border-bottom: 1px solid #333;
+            height: 35px;
+            flex-shrink: 0;
+        }
+
+        /* Utility Region */
+        .utility-region {
+            height: 155px;
+            background: #181818;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 15px;
+            padding: 5px 15px 25px 15px;
+            flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .utility-region .zone-box {
+            transform: scale(0.85);
+            transform-origin: top left;
+            margin-top: 0;
+        }
+
+        /* Battlefield */
+        .battlefield {
+            flex: 1;
+            position: relative;
+            background: #202020;
+            overflow: hidden;
+            min-height: 0;
+            width: 100%;
+        }
+
+        .hand-dock {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: calc(var(--card-h) + 20px);
+            background: rgba(15, 15, 15, 0.95);
+            border-top: 2px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .hand-scroll {
+            display: flex;
+            gap: 5px;
+            padding: 0 20px;
+            overflow-x: auto;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+        }
+
+        /* UI Components */
+        input[type=range] {
+            width: 100px;
+        }
+
+        button {
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 4px 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: 0.2s;
+            font-size: 0.9em;
+        }
+
+        button:hover {
+            background: #555;
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+            font-weight: bold;
+        }
+
+        button.danger {
+            background: #c44;
+            border-color: #a33;
+        }
+
+        .zone-box {
+            position: relative;
+            width: var(--card-w);
+            height: var(--card-h);
+            background: #222;
+            border: 1px dashed #555;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .zone-header {
+            position: absolute;
+            top: auto;
+            bottom: -22px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.8em;
+            color: #aaa;
+            white-space: nowrap;
+        }
+
+        /* Card Styles - Note: .tapped removed, replaced by inline rotation */
+        .card {
+            width: var(--card-w);
+            height: var(--card-h);
+            background-color: #000;
+            background-size: cover;
+            background-position: center;
+            border-radius: 6px;
+            border: 1px solid #000;
+            box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.5);
+            position: absolute;
+            cursor: grab;
+            z-index: 10;
+            user-select: none;
+            transition: transform 0.1s;
+        }
+
+        .card.in-hand,
+        .card.in-stack {
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+            flex-shrink: 0;
+            transform: none !important;
+        }
+
+        .card.transformed {
+            border: 2px solid #0ff;
+        }
+
+        .card.drag-over {
+            border: 2px solid #4f4 !important;
+        }
+
+        .card.is-token {
+            border: 2px solid #a5a;
+        }
+
+        #dragGhost {
+            position: absolute;
+            width: var(--card-w);
+            height: var(--card-h);
+            background-size: cover;
+            opacity: 0.6;
+            pointer-events: none;
+            border: 2px dashed #fff;
+            border-radius: 6px;
+            z-index: 9999;
+            display: none;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Counters, Life, Modals (Unchanged) */
+        .counter-strip {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding-top: 4px;
+            align-items: flex-end;
+            pointer-events: none;
+            width: auto;
+            max-width: 95%;
+            z-index: 12;
+        }
+
+        .counter-pill {
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            font-size: 10px;
+            font-weight: bold;
+            border-radius: 10px 0 0 10px;
+            padding: 1px 4px;
+            box-shadow: -1px 1px 3px rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: 0.2s;
+            pointer-events: auto;
+            z-index: 15;
+        }
+
+        .pill-btn {
+            width: 12px;
+            height: 12px;
+            line-height: 10px;
+            font-size: 10px;
+            text-align: center;
+            background: #444;
+            border: 1px solid #777;
+            color: white;
+            border-radius: 50%;
+            cursor: pointer;
+            padding: 0;
+            opacity: 0;
+            pointer-events: none;
+            display: none;
+            transition: opacity 0.1s;
+        }
+
+        .counter-pill:hover .pill-btn {
+            opacity: 1;
+            pointer-events: auto;
+            display: inline-block;
+        }
+
+        .life-counter {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #000;
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid #444;
+        }
+
+        .life-btn {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            line-height: 18px;
+            font-size: 12px;
+            border-radius: 50%;
+        }
+
+        .life-input {
+            width: 40px;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-align: center;
+            -moz-appearance: textfield;
+        }
+
+        .life-input:focus {
+            background: #333;
+            outline: none;
+            border-radius: 4px;
+        }
+
+        .life-input::-webkit-outer-spin-button,
+        .life-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            background: #111;
+            border: 1px solid #444;
+            color: white;
+            padding: 5px;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        #cntInputName {
+            flex: 2;
+            min-width: 0;
+        }
+
+        #cntInputQty {
+            flex: 1;
+            min-width: 50px;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-box {
+            background: #252525;
+            border: 1px solid #555;
+            border-radius: 8px;
+            width: 80%;
+            height: 80%;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+
+        .modal-grid {
+            flex: 1;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(calc(var(--card-w) + 10px), 1fr));
+            gap: 15px;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+        }
+
+        .modal-grid .card {
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+            transform: none !important;
+        }
+
+        .small-modal {
+            width: 300px;
+            height: auto;
+            text-align: center;
+        }
+
+        .drop-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .counter-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #333;
+            padding: 5px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body oncontextmenu="return false;">
+
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <div>Loading Deck & Images...</div>
+    </div>
+
+    <div class="top-bar">
+        <div style="display:flex; gap:10px; align-items:center;">
+            <a href="/" style="color:#61afef; font-weight:bold; text-decoration:none; margin-right:10px;">← Hub</a>
+            <label>Size</label>
+            <input type="range" min="80" max="250" value="120" oninput="resizeCards(this.value)">
+        </div>
+        <div>
+            <button class="danger" onclick="socket.emit('resetGame')">Reset Game</button>
+        </div>
+        <div style="flex:1; text-align:right; font-size:0.8em; color:#666;">
+            <b>1/2/3</b>: Lib Actions | <b>Tab</b>: Untap All | <b>A/D</b>: Rotate | <b>Shift+Click</b>: Zoom
+        </div>
+    </div>
+
+    <div id="dragGhost"></div>
+
+    <div class="split-container">
+        <div class="viewport" id="vp-left">
+            <div class="tab-bar" id="tabs-left"></div>
+            <div id="board-left" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
+        </div>
+        <div class="viewport" id="vp-right">
+            <div class="tab-bar" id="tabs-right"></div>
+            <div id="board-right" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
+        </div>
+    </div>
+
+    <div class="hand-dock">
+        <div class="hand-scroll" id="my-hand" ondragover="allowDrop(event, myPid, 'hand')"
+            ondrop="handleDrop(event, myPid, 'hand', this)">
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="joinModal" style="display:flex;">
+        <div class="modal-box small-modal">
+            <div class="modal-header">Join Game</div>
+            <input type="text" id="displayName" placeholder="Display Name (Optional)"
+                style="width:100%; margin-bottom:10px;">
+            <button onclick="document.getElementById('deckInput').click()" style="width:100%; padding:10px;">📂 Select
+                Deck JSON</button>
+            <input type="file" id="deckInput" accept=".json" style="display:none" onchange="joinGame(this)">
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="gridModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div><span id="gridTitle">Inspector</span> <span id="tokenHint"
+                        style="display:none; color:#a5a; font-size:0.8em;">(Click to Spawn)</span></div>
+                <button onclick="closeGridModal()">Close</button>
+            </div>
+            <div class="modal-grid" id="gridContent"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="counterModal">
+        <div class="modal-box small-modal">
+            <div class="modal-header"><span>Notes</span> <button
+                    onclick="document.getElementById('counterModal').style.display='none'">X</button></div>
+            <div id="counterList" style="text-align:left; margin-bottom:15px; max-height:200px; overflow-y:auto;"></div>
+            <div style="border-top:1px solid #444; padding-top:10px;">
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                    <input type="text" id="cntInputName" placeholder="Name (e.g. Time)" onkeydown="checkEnter(event)">
+                    <input type="number" id="cntInputQty" placeholder="#" onkeydown="checkEnter(event)">
+                </div>
+                <button class="primary" style="width:100%" onclick="addCounter()">Add Note</button>
+            </div>
+            <button class="danger" style="width:100%; margin-top:20px;" onclick="deleteActiveCard()">Delete
+                Card</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="dropModal">
+        <div class="modal-box small-modal">
+            <div class="modal-header">Library Action</div>
+            <div class="drop-options">
+                <button class="primary" onclick="resolveLibDrop('top')">Top (1)</button>
+                <button onclick="resolveLibDrop('bottom')">Bottom (2)</button>
+                <button onclick="resolveLibDrop('shuffle')">Shuffle In (3)</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="previewModal" onclick="this.style.display='none'" style="z-index:3000;">
+        <img id="previewImg" style="max-height:90vh; max-width:90vw; border:2px solid white; border-radius:10px;">
+    </div>
+
+    <script>
+        const socket = io();
+        let gameState = { players: [] };
+        let myPid = null;
+        let lastLifeUpdate = 0;
+        let localImageCache = {};
+        let viewState = { left: null, right: null };
+        let pendingState = null;
+
+        // --- CONSTANTS ---
+        const KW_MAP = { "flying": "FLY", "reach": "RCH", "haste": "HST", "deathtouch": "DTH", "hexproof": "HXP", "lifelink": "LFL", "first strike": "FST", "double strike": "DST", "vigilance": "VGL", "trample": "TRP", "menace": "MNC", "indestructible": "IND" };
+        const CNTR_MAP = { "time": "TME", "charge": "CRG", "loyalty": "LYT", "poison": "PSN", "stun": "STN", "oil": "OIL", "finality": "FNL", "innovativeness": "INV", "quantity": "QTY" };
+
+        let currentDrag = null;
+        let dropPending = null;
+        let activeModal = null;
+        let activeCardId = null;
+
+        // --- LEAVE CONFIRMATION ---
+        window.addEventListener('beforeunload', (e) => {
+            if (myPid) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        // --- SOCKETS ---
+        socket.on('playerAssigned', ({ pid }) => {
+            document.getElementById('loadingOverlay').style.display = 'none'; // Hide loading
+            console.log(`Assigned to seat: ${pid}`);
+            myPid = pid;
+            document.title = `Arena - ${pid}`;
+            viewState.left = pid;
+            viewState.right = pid;
+            if (gameState.players.length > 0) renderGame();
+        });
+
+        socket.on('stateUpdate', (serverState) => {
+            if (currentDrag) {
+                console.log("Drag active - queuing state update...");
+                pendingState = serverState;
+            } else {
+                gameState = serverState;
+                checkViewports();
+                renderGame();
+            }
+        });
+
+        socket.on('joinError', (msg) => {
+            document.getElementById('loadingOverlay').style.display = 'none'; // Hide loading
+            alert(msg);
+            document.getElementById('joinModal').style.display = 'flex';
+            myPid = null;
+        });
+
+        socket.on('resetClient', () => { location.reload(); });
+        socket.on('updateImageCache', (data) => {
+            Object.assign(localImageCache, data);
+            renderGame();
+        });
+
+        function checkViewports() {
+            if (gameState.players.length > 0) {
+                if (myPid && !viewState.left) viewState.left = myPid;
+                if (myPid && !viewState.right) viewState.right = myPid;
+                if (!viewState.left) viewState.left = gameState.players[0].id;
+                if (!viewState.right) viewState.right = gameState.players.length > 1 ? gameState.players[1].id : gameState.players[0].id;
+            }
+        }
+
+        function joinGame(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const displayName = document.getElementById('displayName').value.trim();
+
+            // Show Loading
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            document.getElementById('joinModal').style.display = 'none';
+
+            const r = new FileReader();
+            r.onload = e => {
+                try {
+                    const deckData = JSON.parse(e.target.result);
+                    socket.emit('registerPlayer', { deckData, displayName });
+                } catch (err) {
+                    alert("Invalid Deck JSON");
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                    document.getElementById('joinModal').style.display = 'flex';
+                }
+            };
+            r.readAsText(file);
+        }
+
+        // --- RENDER LOGIC ---
+        function renderGame() {
+            renderTabs('tabs-left', 'left');
+            renderTabs('tabs-right', 'right');
+            renderViewport('board-left', viewState.left);
+            renderViewport('board-right', viewState.right);
+
+            const handContainer = document.getElementById('my-hand');
+            handContainer.innerHTML = '';
+            const myP = gameState.players.find(p => p.id === myPid);
+            if (myP) {
+                myP.hand.forEach(c => {
+                    const card = createCard(c, myPid, 'hand');
+                    card.classList.add('in-hand');
+                    handContainer.appendChild(card);
+                });
+            }
+            if (activeModal) renderGrid();
+        }
+
+        function renderTabs(containerId, viewKey) {
+            const cont = document.getElementById(containerId);
+            cont.innerHTML = '';
+            gameState.players.forEach(p => {
+                const btn = document.createElement('div');
+                btn.className = 'tab-btn' + (viewState[viewKey] === p.id ? ' active' : '');
+                btn.innerText = p.name;
+                btn.onclick = () => { viewState[viewKey] = p.id; renderGame(); };
+                cont.appendChild(btn);
+            });
+        }
+
+        function renderViewport(containerId, pid) {
+            const cont = document.getElementById(containerId);
+            cont.innerHTML = '';
+            if (!pid) return;
+            const p = gameState.players.find(x => x.id === pid);
+            if (!p) return;
+
+            const header = document.createElement('div');
+            header.className = 'board-header';
+            const isMyView = (pid === myPid);
+            const lifeDisplay = (isMyView && Date.now() - lastLifeUpdate < 2000)
+                ? (document.getElementById(`life-${p.id}`)?.value || p.life) : p.life;
+
+            header.innerHTML = `
+            <strong>${p.name}</strong>
+            <div class="life-counter">
+                <button class="life-btn" onclick="emitLife('${p.id}', -1)">-</button>
+                <input type="number" class="life-input" id="life-${p.id}" value="${lifeDisplay}" defaultValue="${p.life}" 
+                       onchange="setLife('${p.id}', this.value)" onfocus="lastLifeUpdate = Date.now() + 5000">
+                <button class="life-btn" onclick="emitLife('${p.id}', 1)">+</button>
+            </div>
+            <div>${p.id === myPid ? `<button onclick="emitDraw('${p.id}')">Draw</button> <button onclick="socket.emit('shuffle', {pid:'${p.id}'})">Shuffle</button>` : ''}</div>
+        `;
+            cont.appendChild(header);
+
+            const utilRow = document.createElement('div');
+            utilRow.className = 'utility-region';
+            utilRow.appendChild(createZoneUI(p.id, 'command', 'Cmd', p.command));
+            utilRow.appendChild(createZoneUI(p.id, 'tokens', 'Tok', p.tokens));
+            utilRow.appendChild(createZoneUI(p.id, 'graveyard', 'GY', p.graveyard));
+            utilRow.appendChild(createZoneUI(p.id, 'exile', 'Ex', p.exile));
+            utilRow.appendChild(createZoneUI(p.id, 'library', 'Lib', p.library));
+            cont.appendChild(utilRow);
+
+            const bf = document.createElement('div');
+            bf.className = 'battlefield';
+            bf.setAttribute('ondragover', `allowDrop(event, '${p.id}', 'battlefield')`);
+            bf.setAttribute('ondrop', `handleDrop(event, '${p.id}', 'battlefield', this)`);
+
+            p.battlefield.forEach(c => bf.appendChild(createCard(c, p.id, 'battlefield')));
+            cont.appendChild(bf);
+        }
+
+        function createZoneUI(pid, zone, title, cards) {
+            const wrapper = document.createElement('div');
+            const count = cards.length;
+            const style = zone === 'tokens' ? 'border-color:#a5a;' : '';
+
+            wrapper.className = 'zone-box';
+            wrapper.style.cssText = style;
+            wrapper.setAttribute('ondragover', `allowDrop(event, '${pid}', '${zone}')`);
+            wrapper.setAttribute('ondrop', `handleDrop(event, '${pid}', '${zone}', this)`);
+
+            wrapper.innerHTML = `
+            <div class="zone-header">
+                <span>${title} (${count})</span>
+                <button style="font-size:10px; padding:1px 4px;" onclick="openInspect('${pid}', '${zone}')">🔍</button>
+            </div>
+        `;
+
+            if (cards.length > 0) {
+                if (zone === 'library') {
+                    const dummy = document.createElement('div');
+                    dummy.className = 'card in-stack';
+                    dummy.style.background = `repeating-linear-gradient(45deg, #222, #333 10px)`;
+                    dummy.draggable = true;
+                    dummy.ondragend = endDrag;
+                    dummy.ondragstart = (e) => startDrag(e, cards[0].uid, pid, zone, null);
+                    wrapper.appendChild(dummy);
+                } else {
+                    const topCard = zone === 'tokens' ? cards[0] : cards[cards.length - 1];
+                    const vis = createCard(topCard, pid, zone);
+                    vis.classList.add('in-stack');
+                    if (zone === 'tokens') vis.draggable = false;
+                    wrapper.appendChild(vis);
+                }
+            }
+            return wrapper;
+        }
+
+        // --- CORE CARD LOGIC ---
+        function startDrag(e, uid, pid, zone, img) {
+            if (e.shiftKey) { e.preventDefault(); return; }
+            e.target.style.opacity = '0.4';
+            e.target.classList.add('is-dragging');
+            const blankImg = new Image();
+            blankImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+            e.dataTransfer.setDragImage(blankImg, 0, 0);
+            e.dataTransfer.effectAllowed = 'move';
+            const cached = localImageCache[uid];
+            const realImg = (cached && cached.front) ? cached.front : img;
+            currentDrag = { uid, sourceZone: zone, fromPid: pid, img: realImg };
+        }
+
+        function endDrag(e) {
+            document.getElementById('dragGhost').style.display = 'none';
+            if (e.target) {
+                e.target.style.opacity = '1';
+                e.target.classList.remove('is-dragging');
+            }
+            currentDrag = null;
+            if (pendingState) {
+                gameState = pendingState;
+                pendingState = null;
+                checkViewports();
+                renderGame();
+            }
+        }
+
+        function createCard(data, pid, zone) {
+            const el = document.createElement('div');
+            el.id = data.uid;
+            el.className = 'card' + (data.isToken ? ' is-token' : '');
+
+            // Image Lookup
+            const cached = localImageCache[data.uid];
+            let frontImg = cached ? cached.front : null;
+            let backImg = cached ? cached.back : null;
+            let imgUrl = frontImg;
+
+            if (data.isUnknown) {
+                imgUrl = "https://upload.wikimedia.org/wikipedia/en/a/aa/Magic_the_gathering-card_back.jpg";
+                el.style.cursor = "default"; el.draggable = false;
+            } else if (!imgUrl) {
+                imgUrl = "https://upload.wikimedia.org/wikipedia/en/a/aa/Magic_the_gathering-card_back.jpg";
+            } else {
+                imgUrl = (data.transformed && backImg) ? backImg : frontImg;
+            }
+
+            el.style.backgroundImage = `url('${imgUrl}')`;
+
+            // --- ROTATION CHANGE ---
+            // data.rotation is now an integer (0, 90, 180, -90). 
+            if (data.rotation) el.style.transform = `rotate(${data.rotation}deg)`;
+            if (data.transformed) el.classList.add('transformed');
+
+            if (zone === 'battlefield') {
+                el.style.left = (data.x * 100) + '%';
+                el.style.top = (data.y * 100) + '%';
+            }
+
+            if (!data.isUnknown) {
+                el.onmousedown = (e) => {
+                    if (e.shiftKey) {
+                        e.preventDefault(); e.stopPropagation();
+                        document.getElementById('previewImg').src = imgUrl;
+                        document.getElementById('previewModal').style.display = 'flex';
+                    }
+                    if (activeModal && activeModal.type === 'tokens') {
+                        socket.emit('spawnToken', { pid: myPid, templateId: data.id, x: 0.5, y: 0.5 });
+                        closeGridModal();
+                    }
+                };
+                el.oncontextmenu = (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (zone !== 'tokens' && zone !== 'library') openCounterManager(data.uid, pid, zone);
+                };
+                el.draggable = true;
+                el.ondragend = endDrag;
+                el.ondragstart = (e) => startDrag(e, data.uid, pid, zone, imgUrl);
+
+                if (zone !== 'hand') {
+                    el.ondragover = (e) => { if (activeModal) { e.preventDefault(); el.classList.add('drag-over'); } };
+                    el.ondragleave = () => el.classList.remove('drag-over');
+                    el.ondrop = (e) => {
+                        if (activeModal && currentDrag) {
+                            e.preventDefault(); e.stopPropagation();
+                            el.classList.remove('drag-over');
+                            if (currentDrag.fromPid === pid && currentDrag.sourceZone === zone) {
+                                socket.emit('reorderZone', { pid: pid, zone: zone, uid: currentDrag.uid, targetUid: data.uid });
+                            }
+                        }
+                    };
+                }
+            }
+
+            if (data.counters && data.counters.length > 0) {
+                const strip = document.createElement('div');
+                strip.className = 'counter-strip';
+                data.counters.forEach((txt, index) => {
+                    const pill = document.createElement('div');
+                    pill.className = 'counter-pill';
+                    const match = txt.match(/^(.+):(-?\d+)$/);
+                    if (match) {
+                        let name = match[1];
+                        let val = parseInt(match[2]);
+                        let displayTxt = "";
+                        if (name === '+1/+1') { displayTxt = `+${val}/+${val}`; pill.style.color = '#6c3'; }
+                        else if (name === '-1/-1') { displayTxt = `${val}/${val}`; pill.style.color = '#f66'; }
+                        else {
+                            displayTxt = `${name} ${val}`;
+                            if (name.includes('+')) pill.style.color = '#6c3';
+                            else if (name.includes('-')) pill.style.color = '#f66';
+                        }
+                        pill.innerHTML = `
+                        <button class="pill-btn" onclick="adjustCounter(event, '${data.uid}', '${pid}', '${zone}', ${index}, -1)">-</button>
+                        <span>${displayTxt}</span>
+                        <button class="pill-btn" onclick="adjustCounter(event, '${data.uid}', '${pid}', '${zone}', ${index}, 1)">+</button>
+                    `;
+                    } else { pill.innerText = txt; }
+                    strip.appendChild(pill);
+                });
+                el.appendChild(strip);
+            }
+            return el;
+        }
+
+        function allowDrop(e, pid, zone) {
+            e.preventDefault();
+            if (zone === 'battlefield' && currentDrag && currentDrag.img) {
+                const ghost = document.getElementById('dragGhost');
+                ghost.style.display = 'block';
+                ghost.style.backgroundImage = `url('${currentDrag.img}')`;
+                ghost.style.left = e.clientX + 'px';
+                ghost.style.top = e.clientY + 'px';
+            }
+        }
+
+        function handleDrop(e, toPid, toZone, targetEl) {
+            e.preventDefault();
+            document.getElementById('dragGhost').style.display = 'none';
+            if (!currentDrag) return;
+
+            const { uid, sourceZone, fromPid } = currentDrag;
+            let x = 0.5, y = 0.5;
+            let index = -1;
+
+            if (toZone === 'battlefield') {
+                const rect = targetEl.getBoundingClientRect();
+                const cardW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--card-w'));
+                const cardH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--card-h'));
+                const rawX = e.clientX - rect.left - (cardW / 2);
+                const rawY = e.clientY - rect.top - (cardH / 2);
+                x = Math.max(0, Math.min(1, rawX / rect.width));
+                y = Math.max(0, Math.min(1, rawY / rect.height));
+            }
+
+            if (toZone === 'hand') {
+                const children = Array.from(targetEl.children).filter(c => c.id !== uid);
+                const matchIndex = children.findIndex(child => {
+                    const r = child.getBoundingClientRect();
+                    const centerX = r.left + (r.width / 2);
+                    return e.clientX < centerX;
+                });
+                index = matchIndex === -1 ? children.length : matchIndex;
+            }
+
+            if (toZone === 'library') {
+                dropPending = { fromPid, fromZone: sourceZone, toPid, toZone, uid, x, y, index };
+                document.getElementById('dropModal').style.display = 'flex';
+            } else {
+                emitMove(fromPid, sourceZone, toPid, toZone, uid, x, y, 'top', index);
+            }
+        }
+
+        function emitMove(fromPid, fromZone, toPid, toZone, uid, x, y, method, index = -1) {
+            socket.emit('moveCard', { fromPid, fromZone, toPid, toZone, uid, x, y, method, index });
+        }
+
+        // --- HELPERS ---
+        function emitLife(pid, amt) {
+            const el = document.getElementById(`life-${pid}`);
+            if (el) {
+                const newVal = parseInt(el.value) + amt;
+                el.value = newVal; el.defaultValue = newVal;
+                if (pid === myPid) lastLifeUpdate = Date.now();
+            }
+            socket.emit('modLife', { pid, amt });
+        }
+        function setLife(pid, newVal) {
+            const el = document.getElementById(`life-${pid}`);
+            const intVal = parseInt(newVal);
+            if (isNaN(intVal)) return;
+            if (pid === myPid) lastLifeUpdate = Date.now();
+            const diff = intVal - parseInt(el.defaultValue);
+            if (diff !== 0) { socket.emit('modLife', { pid, amt: diff }); el.defaultValue = intVal; }
+        }
+        function emitDraw(pid) { emitMove(pid, 'library', pid, 'hand', null, 0, 0, 'top'); }
+
+        function resolveLibDrop(method) {
+            if (dropPending) {
+                const { fromPid, fromZone, toPid, toZone, uid, x, y, index } = dropPending;
+                emitMove(fromPid, fromZone, toPid, toZone, uid, x, y, method, index);
+                dropPending = null;
+                document.getElementById('dropModal').style.display = 'none';
+            }
+        }
+
+        // --- NEW: Helper for "Hover + 1" shortcut ---
+        function initiateLibraryMove(card, pid, zone) {
+            // Mock a dropPending state
+            dropPending = { fromPid: pid, fromZone: zone, toPid: pid, toZone: 'library', uid: card.uid, x: 0, y: 0, index: -1 };
+            document.getElementById('dropModal').style.display = 'flex';
+        }
+
+        function openInspect(pid, zone) {
+            activeModal = { type: zone === 'tokens' ? 'tokens' : 'inspect', pid, zone };
+            document.getElementById('gridTitle').innerText = `${zone.toUpperCase()} - ${pid}`;
+            document.getElementById('tokenHint').style.display = zone === 'tokens' ? 'inline' : 'none';
+            document.getElementById('gridModal').style.display = 'flex';
+            renderGrid();
+        }
+        function closeGridModal() { document.getElementById('gridModal').style.display = 'none'; activeModal = null; }
+        function renderGrid() {
+            const grid = document.getElementById('gridContent');
+            grid.innerHTML = '';
+            const { pid, zone, type } = activeModal;
+            const p = gameState.players.find(x => x.id === pid);
+            if (!p) return;
+            p[zone].forEach(c => {
+                const el = createCard(c, pid, zone);
+                if (type !== 'tokens') el.onclick = () => { if (type === 'tokens') return; };
+                grid.appendChild(el);
+            });
+        }
+
+        function openCounterManager(uid, pid, zone) {
+            activeCardId = { uid, pid, zone };
+            document.getElementById('counterModal').style.display = 'flex';
+            renderCounters();
+            setTimeout(() => document.getElementById('cntInputName').focus(), 100);
+        }
+        function renderCounters() {
+            const { uid, pid, zone } = activeCardId;
+            const p = gameState.players.find(x => x.id === pid);
+            const card = p[zone].find(c => c.uid === uid);
+            if (!card) return;
+            const list = document.getElementById('counterList');
+            list.innerHTML = '';
+            card.counters.forEach((txt, index) => {
+                const row = document.createElement('div');
+                row.className = 'counter-row';
+                row.innerHTML = `<span>${txt}</span> <button class="danger" onclick="doRemoveCounter(${index})">X</button>`;
+                list.appendChild(row);
+            });
+        }
+        function checkEnter(e) { if (e.key === 'Enter') addCounter(); }
+        function addCounter() {
+            const nameVal = document.getElementById('cntInputName').value.trim();
+            const qtyVal = document.getElementById('cntInputQty').value.trim();
+            if (!nameVal) return;
+            const { uid, pid, zone } = activeCardId;
+            const p = gameState.players.find(x => x.id === pid);
+            const card = p[zone].find(c => c.uid === uid);
+            let processedName = nameVal;
+            let lower = nameVal.toLowerCase();
+            if (CNTR_MAP[lower]) processedName = CNTR_MAP[lower];
+            else if (KW_MAP[lower]) processedName = KW_MAP[lower];
+            let finalString = processedName;
+            if (qtyVal !== "") { finalString = `${processedName}:${qtyVal}`; }
+            else { if (nameVal.includes("+1/+1") || nameVal.includes("-1/-1")) { finalString = `${processedName}:1`; } }
+            const newArr = [...card.counters, finalString];
+            socket.emit('cardUpdate', { pid, zone, uid, updates: { counters: newArr } });
+            document.getElementById('cntInputName').value = '';
+            document.getElementById('cntInputQty').value = '';
+            setTimeout(renderCounters, 100);
+        }
+        function doRemoveCounter(idx) {
+            const { uid, pid, zone } = activeCardId;
+            const p = gameState.players.find(x => x.id === pid);
+            const card = p[zone].find(c => c.uid === uid);
+            const newArr = [...card.counters];
+            newArr.splice(idx, 1);
+            socket.emit('cardUpdate', { pid, zone, uid, updates: { counters: newArr } });
+            setTimeout(renderCounters, 100);
+        }
+        function adjustCounter(e, uid, pid, zone, index, delta) {
+            e.stopPropagation();
+            const p = gameState.players.find(x => x.id === pid);
+            if (!p) return;
+            const card = p[zone].find(c => c.uid === uid);
+            if (!card) return;
+            const currentStr = card.counters[index];
+            const match = currentStr.match(/^(.+):(-?\d+)$/);
+            if (match) {
+                const name = match[1];
+                let val = parseInt(match[2]);
+                val += delta;
+                const newArr = [...card.counters];
+                newArr[index] = `${name}:${val}`;
+                socket.emit('cardUpdate', { pid, zone, uid, updates: { counters: newArr } });
+            }
+        }
+        function deleteActiveCard() {
+            if (confirm("Destroy card?")) {
+                const { uid, pid, zone } = activeCardId;
+                socket.emit('deleteCard', { pid, zone, uid });
+                document.getElementById('counterModal').style.display = 'none';
+            }
+        }
+
+        // --- KEYBINDINGS & HELPERS ---
+        let hoverId = null;
+        document.addEventListener('mouseover', e => { if (e.target.classList.contains('card')) hoverId = e.target.id; else hoverId = null; });
+
+        document.addEventListener('keydown', e => {
+            // --- 1. HANDLE MODAL SHORTCUTS (1, 2, 3) ---
+            if (document.getElementById('dropModal').style.display === 'flex') {
+                if (e.key === '1') resolveLibDrop('top');
+                if (e.key === '2') resolveLibDrop('bottom');
+                if (e.key === '3') resolveLibDrop('shuffle');
+                return; // Stop other processing
+            }
+
+            // --- 2. UNTAP ALL SHORTCUT (Tab) ---
+            // Block Tab if counter modal or any input is focused
+            if (e.key === 'Tab') {
+                if (document.getElementById('counterModal').style.display === 'flex') return;
+                if (document.activeElement.tagName === 'INPUT') return;
+                e.preventDefault();
+                socket.emit('untapAll', { pid: myPid });
+                return;
+            }
+
+            if (!hoverId || document.activeElement.tagName === 'INPUT') return;
+
+            // Find the card being hovered
+            let targetC = null, targetP = null, targetZ = null;
+            gameState.players.forEach(p => {
+                ['battlefield', 'hand', 'library', 'graveyard', 'exile', 'command'].forEach(z => {
+                    const found = p[z].find(c => c.uid === hoverId);
+                    if (found) { targetC = found; targetP = p.id; targetZ = z; }
+                });
+            });
+            if (!targetC) return;
+
+            const k = e.key.toLowerCase();
+
+            // --- 3. LIBRARY SHORTCUT (1) ---
+            if (k === '1') {
+                initiateLibraryMove(targetC, targetP, targetZ);
+            }
+
+            // --- 4. ROTATION SHORTCUTS (A/D) ---
+            if (k === 'a') {
+                const currentRot = targetC.rotation || 0;
+                socket.emit('cardUpdate', { pid: targetP, zone: targetZ, uid: targetC.uid, updates: { rotation: currentRot - 90 } });
+            }
+            if (k === 'd') {
+                const currentRot = targetC.rotation || 0;
+                socket.emit('cardUpdate', { pid: targetP, zone: targetZ, uid: targetC.uid, updates: { rotation: currentRot + 90 } });
+            }
+
+            // --- 5. TRANSFORM (F) ---
+            const cached = localImageCache[targetC.uid];
+            const hasBack = cached && cached.back;
+            if (k === 'f' && hasBack) {
+                socket.emit('cardUpdate', { pid: targetP, zone: targetZ, uid: targetC.uid, updates: { transformed: !targetC.transformed } });
+            }
+
+            // --- 6. ZONE SHORTCUTS (W/Q/E/H) — Work from ANY zone ---
+            if (k === 'q') emitMove(targetP, targetZ, targetC.owner, 'graveyard', targetC.uid);
+            if (k === 'e') emitMove(targetP, targetZ, targetC.owner, 'exile', targetC.uid);
+            if (k === 'h') emitMove(targetP, targetZ, targetC.owner, 'hand', targetC.uid);
+            if (k === 'w' && targetZ !== 'battlefield') {
+                emitMove(targetP, targetZ, myPid, 'battlefield', targetC.uid, 0.4 + Math.random() * 0.2, 0.4 + Math.random() * 0.2);
+            }
+        });
+
+        function resizeCards(val) {
+            document.documentElement.style.setProperty('--card-w', val + 'px');
+            document.documentElement.style.setProperty('--card-h', (val * 1.4) + 'px');
+        }
+    </script>
+</body>
+
+</html>

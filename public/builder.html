@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deck Builder — MTG Commander Arena</title>
+    <link rel="stylesheet" href="/css/shared.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* --- Creator Panel (Left) --- */
+        .creator-panel {
+            width: 340px;
+            background: var(--panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .creator-panel h2 {
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+
+        .creator-panel h3 {
+            font-size: 0.85em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-top: 20px;
+            border-top: 1px solid var(--border);
+            padding-top: 10px;
+        }
+
+        .creator-panel button {
+            margin-bottom: 6px;
+        }
+
+        .creator-panel input,
+        .creator-panel select {
+            margin-bottom: 6px;
+        }
+
+        .file-input-wrapper {
+            border: 1px dashed #555;
+            padding: 10px;
+            margin-bottom: 5px;
+            text-align: center;
+            border-radius: 6px;
+        }
+
+        .file-input-wrapper label {
+            font-size: 0.8em;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        /* --- Deck View (Right) --- */
+        .deck-view {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .zone-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .zone-header {
+            background: var(--surface);
+            padding: 5px 15px;
+            font-size: 0.9em;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 5px solid #555;
+            flex-shrink: 0;
+        }
+
+        .zone-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background: #111;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 10px;
+        }
+
+        .visual-card {
+            position: relative;
+            aspect-ratio: 2.5/3.5;
+            background-color: #222;
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid #444;
+            transition: transform 0.1s;
+        }
+
+        .visual-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .visual-card:hover {
+            transform: scale(1.05);
+            z-index: 100;
+            border-color: var(--accent);
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .visual-card:hover .overlay {
+            display: flex;
+        }
+
+        .mini-btn {
+            font-size: 0.7em;
+            padding: 4px;
+            width: 80%;
+            background: #444;
+            border: 1px solid #666;
+            cursor: pointer;
+            color: #eee;
+            border-radius: 4px;
+            transition: 0.2s;
+        }
+
+        .mini-btn:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .mini-btn.del:hover {
+            background: var(--red);
+            color: #fff;
+        }
+
+        .flip-icon {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            text-align: center;
+            line-height: 20px;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
+        /* --- Loading Screen --- */
+        #loadingScreen {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #currentCardMsg {
+            font-family: monospace;
+            color: #aaa;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            height: 1.2em;
+        }
+
+        #percentMsg {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .warning-text {
+            color: var(--gold);
+            font-size: 0.9em;
+            max-width: 600px;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+
+        .critical-warning {
+            color: var(--red);
+            font-weight: bold;
+            display: block;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="nav-bar">
+        <span class="brand">⚔️ MTG Commander Arena</span>
+        <a href="/">Hub</a>
+        <a href="/builder.html" class="active">Deck Builder</a>
+        <a href="/Arena.html">Play</a>
+    </nav>
+
+    <div id="loadingScreen">
+        <h2 style="margin-bottom: 10px;">Getting your deck ready!</h2>
+        <div class="warning-text">
+            This may take a few minutes...
+            <span class="critical-warning">WARNING: If your Moxfield deck is set to private, the download will not
+                complete! Make sure your deck is public or unlisted before downloading!</span>
+        </div>
+        <div id="currentCardMsg">Starting...</div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div id="percentMsg">0%</div>
+    </div>
+
+    <div class="main-content">
+        <div class="creator-panel">
+            <h2>Deck Forge</h2>
+
+            <h3>1. Import / Load</h3>
+            <input type="text" id="moxfieldUrl" placeholder="https://moxfield.com/decks/..." onfocus="this.select()">
+            <button class="btn-green btn-block" onclick="startMoxfieldImport()">⬇️ Import from Moxfield</button>
+            <button class="btn-block" onclick="document.getElementById('loadJsonInput').click()"
+                style="margin-top:5px;">📂 Load Existing Deck JSON</button>
+            <input type="file" id="loadJsonInput" accept=".json" style="display:none" onchange="loadDeckJSON()">
+
+            <h3>2. Manual Add</h3>
+            <select id="manZone">
+                <option value="library">Library</option>
+                <option value="command">Command</option>
+                <option value="tokens">Tokens</option>
+            </select>
+
+            <div class="file-input-wrapper">
+                <label>Front Image (Required)</label>
+                <input type="file" id="manFront" accept="image/*">
+            </div>
+            <div class="file-input-wrapper">
+                <label>Back Image (Optional)</label>
+                <input type="file" id="manBack" accept="image/*">
+            </div>
+            <input type="text" id="manName" placeholder="Card Name">
+            <button class="btn-block" onclick="manualAdd()">➕ Add Single Card</button>
+
+            <div style="border-top:1px dashed #444; margin-top:5px; padding-top:5px;">
+                <h3>Bulk Import (Images)</h3>
+                <label style="font-size:0.8em; color:var(--text-muted);">Target Zone</label>
+                <select id="bulkZone">
+                    <option value="library">Library</option>
+                    <option value="command">Command</option>
+                    <option value="tokens">Tokens</option>
+                </select>
+                <input type="file" id="bulkInput" multiple accept="image/*" onchange="bulkAdd()">
+            </div>
+
+            <h3>3. Export</h3>
+            <input type="text" id="deckName" placeholder="Deck Name">
+            <button class="btn-primary btn-block" onclick="exportJSON()">💾 Save Deck JSON</button>
+            <button class="btn-purple btn-block" onclick="downloadCards()">📂 Download Card Images</button>
+            <button class="btn-danger btn-block" onclick="resetAll()">⚠️ Reset All</button>
+
+            <div style="border-top:1px dashed #444; margin-top:15px; padding-top:10px;">
+                <a href="/Arena.html" class="btn btn-primary btn-block" style="text-align:center;">⚔️ Launch Arena</a>
+            </div>
+        </div>
+
+        <div class="deck-view">
+            <div class="zone-container" style="flex: 0 0 200px;">
+                <div class="zone-header" style="border-color: var(--gold);">COMMAND ZONE <span id="cnt-command">0</span>
+                </div>
+                <div class="zone-content">
+                    <div class="card-grid" id="grid-command"></div>
+                </div>
+            </div>
+            <div class="zone-container">
+                <div class="zone-header" style="border-color: var(--green);">LIBRARY <span id="cnt-library">0</span>
+                </div>
+                <div class="zone-content">
+                    <div class="card-grid" id="grid-library"></div>
+                </div>
+            </div>
+            <div class="zone-container" style="flex: 0 0 180px;">
+                <div class="zone-header" style="border-color: var(--purple);">TOKENS <span id="cnt-tokens">0</span>
+                </div>
+                <div class="zone-content">
+                    <div class="card-grid" id="grid-tokens"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let deck = { command: [], library: [], tokens: [] };
+        let pollInterval = null;
+
+        // === IMPORT LOGIC ===
+        // Moxfield API is fetched server-side to bypass CORS and Cloudflare.
+        async function startMoxfieldImport() {
+            const url = document.getElementById('moxfieldUrl').value;
+            if (!url.includes("moxfield.com/decks/")) return alert("Invalid URL — must be a Moxfield deck link.");
+            showLoading(true);
+            document.getElementById('currentCardMsg').innerText = "Fetching deck list from Moxfield...";
+
+            const deckId = url.split('/decks/')[1].split(/[?#]/)[0];
+
+            try {
+                // Step 1: Server proxies Moxfield API (bypasses CORS + Cloudflare)
+                const moxResp = await fetch(`/api/builder/moxfield-proxy?id=${deckId}`);
+                if (!moxResp.ok) {
+                    const errData = await moxResp.json().catch(() => ({}));
+                    throw new Error(errData.error || "Could not fetch deck. Is it public/unlisted?");
+                }
+                const mox = await moxResp.json();
+
+                document.getElementById('currentCardMsg').innerText = "Deck list received! Downloading card images...";
+
+                // Step 2: Extract card lists — handle both v2 and v3 API formats
+                let commanders, library, tokens;
+                if (mox.boards) {
+                    // v3 format: boards.commanders.cards, boards.mainboard.cards
+                    commanders = Object.values((mox.boards.commanders || {}).cards || {});
+                    library = Object.values((mox.boards.mainboard || {}).cards || {});
+                } else {
+                    // v2 format: top-level commanders, mainboard
+                    commanders = Object.values(mox.commanders || {});
+                    library = Object.values(mox.mainboard || {});
+                }
+                tokens = mox.tokens || [];
+                const deckName = mox.name || "Imported";
+
+                const resp = await fetch('/api/builder/import-cards', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deckName, commanders, library, tokens })
+                });
+
+                if (!resp.ok) throw new Error("Server error starting import");
+
+                // Step 3: Poll for progress
+                pollInterval = setInterval(checkProgress, 500);
+
+            } catch (err) {
+                alert("Import Error: " + err.message);
+                showLoading(false);
+            }
+        }
+
+        async function checkProgress() {
+            const res = await fetch('/api/builder/status');
+            const status = await res.json();
+            const pct = Math.floor((status.progress / (status.total || 1)) * 100);
+            document.getElementById('progressBar').style.width = pct + "%";
+            document.getElementById('percentMsg').innerText = pct + "%";
+            if (status.message) document.getElementById('currentCardMsg').innerText = status.message;
+
+            if (status.done) {
+                clearInterval(pollInterval);
+                if (status.error) alert("Error: " + status.error);
+                else {
+                    deck = status.result;
+                    document.getElementById('deckName').value = deck.deckName;
+                    render();
+                    if (status.missing && status.missing.length > 0) {
+                        alert("⚠️ Some cards could not be found automatically:\n\n" + status.missing.join("\n") + "\n\nPlease add these manually.");
+                    }
+                }
+                showLoading(false);
+            }
+        }
+
+        // === JSON LOAD ===
+        function loadDeckJSON() {
+            const file = document.getElementById('loadJsonInput').files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const loadedDeck = JSON.parse(e.target.result);
+                    if (!loadedDeck.library && !loadedDeck.command) throw new Error("Invalid Deck JSON format");
+
+                    const mapCard = (c) => ({
+                        id: c.id,
+                        name: c.name,
+                        front: c.front || c.image,
+                        back: c.back || c.backImage,
+                        is_flipped: false
+                    });
+
+                    deck = {
+                        deckName: loadedDeck.deckName || "Loaded Deck",
+                        command: (loadedDeck.command || []).map(mapCard),
+                        library: (loadedDeck.library || []).map(mapCard),
+                        tokens: (loadedDeck.tokens || []).map(mapCard)
+                    };
+
+                    document.getElementById('deckName').value = deck.deckName;
+                    await fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+                    render();
+                    alert("Deck Loaded Successfully!");
+                } catch (err) {
+                    alert("Failed to load JSON: " + err.message);
+                }
+                document.getElementById('loadJsonInput').value = "";
+            };
+            reader.readAsText(file);
+        }
+
+        // === MANUAL ADD ===
+        async function manualAdd() {
+            const frontFile = document.getElementById('manFront').files[0];
+            const backFile = document.getElementById('manBack').files[0];
+            const name = document.getElementById('manName').value || "New Card";
+            const zone = document.getElementById('manZone').value;
+
+            if (!frontFile) return alert("Front image required");
+
+            const frontB64 = await toBase64(frontFile);
+            let backB64 = null;
+            if (backFile) backB64 = await toBase64(backFile);
+
+            const payload = { zone, name, front: frontB64, back: backB64 };
+            const res = await fetch('/api/builder/add-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            deck = data.deck;
+            render();
+
+            document.getElementById('manFront').value = "";
+            document.getElementById('manBack').value = "";
+            document.getElementById('manName').value = "";
+        }
+
+        // === BULK ADD ===
+        async function bulkAdd() {
+            const files = document.getElementById('bulkInput').files;
+            const zone = document.getElementById('bulkZone').value;
+            if (!files.length) return;
+
+            showLoading(true);
+
+            for (let i = 0; i < files.length; i++) {
+                const pct = Math.floor(((i + 1) / files.length) * 100);
+                document.getElementById('progressBar').style.width = pct + "%";
+                document.getElementById('percentMsg').innerText = pct + "%";
+                document.getElementById('currentCardMsg').innerText = `Compressing ${files[i].name}...`;
+
+                const f = files[i];
+                const b64 = await toBase64(f);
+                const name = f.name.replace(/\.[^/.]+$/, "");
+
+                await fetch('/api/builder/add-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: zone, name, front: b64 }) });
+            }
+
+            const res = await fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+            const data = await res.json();
+            deck = data;
+
+            render();
+            showLoading(false);
+            document.getElementById('bulkInput').value = "";
+        }
+
+        function toBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // === DOWNLOAD CARDS (ZIP) ===
+        async function downloadCards() {
+            window.location.href = '/api/builder/download';
+        }
+
+        // === RENDER ===
+        function render() {
+            renderZone('grid-command', deck.command, 'command');
+            renderZone('grid-library', deck.library, 'library');
+            renderZone('grid-tokens', deck.tokens, 'tokens');
+            document.getElementById('cnt-command').innerText = deck.command.length;
+            document.getElementById('cnt-library').innerText = deck.library.length;
+            document.getElementById('cnt-tokens').innerText = deck.tokens.length;
+        }
+
+        function renderZone(elId, cards, zoneName) {
+            const el = document.getElementById(elId);
+            el.innerHTML = '';
+            cards.forEach((c, i) => {
+                const div = document.createElement('div');
+                div.className = 'visual-card';
+                const currentImg = (c.is_flipped && c.back) ? c.back : c.front;
+
+                div.innerHTML = `
+                    <img src="${currentImg}">
+                    ${c.back ? '<div class="flip-icon">🔄</div>' : ''}
+                    <div class="overlay">
+                        ${c.back ? `<button class="mini-btn" onclick="flipCard('${zoneName}', ${i})">Flip View</button>` : ''}
+                        ${zoneName !== 'command' ? `<button class="mini-btn" onclick="move('${zoneName}','command',${i})">To Command</button>` : ''}
+                        ${zoneName !== 'library' ? `<button class="mini-btn" onclick="move('${zoneName}','library',${i})">To Library</button>` : ''}
+                        ${zoneName !== 'tokens' ? `<button class="mini-btn" onclick="move('${zoneName}','tokens',${i})">To Token</button>` : ''}
+                        <button class="mini-btn del" onclick="del('${zoneName}',${i})">Remove</button>
+                    </div>
+                `;
+                el.appendChild(div);
+            });
+        }
+
+        function flipCard(zone, idx) {
+            deck[zone][idx].is_flipped = !deck[zone][idx].is_flipped;
+            render();
+        }
+
+        function move(from, to, idx) {
+            const card = deck[from].splice(idx, 1)[0];
+            deck[to].push(card);
+            fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+            render();
+        }
+
+        function del(zone, idx) {
+            if (confirm("Delete card?")) {
+                deck[zone].splice(idx, 1);
+                fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+                render();
+            }
+        }
+
+        function resetAll() {
+            if (confirm("Reset everything?")) {
+                deck = { command: [], library: [], tokens: [] };
+                fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+                render();
+            }
+        }
+
+        function exportJSON() {
+            const name = document.getElementById('deckName').value || "Deck";
+            deck.deckName = name;
+
+            const cleanDeck = {
+                deckName: name,
+                command: deck.command.map(cleanCard),
+                library: deck.library.map(cleanCard),
+                tokens: deck.tokens.map(cleanCard)
+            };
+
+            const blob = new Blob([JSON.stringify(cleanDeck)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = name.replace(/\s+/g, "_") + ".json";
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }
+
+        function cleanCard(c) {
+            return { id: c.id, name: c.name, image: c.front, backImage: c.back };
+        }
+
+        function showLoading(show) { document.getElementById('loadingScreen').style.display = show ? 'flex' : 'none'; }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Commander Arena</title>
+    <link rel="stylesheet" href="/css/shared.css">
+    <style>
+        body { display: flex; flex-direction: column; min-height: 100vh; }
+
+        .hero {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 40px 20px; text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 3em; font-weight: 800; margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero .subtitle { color: var(--text-muted); font-size: 1.1em; margin-bottom: 50px; }
+
+        .card-row { display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; max-width: 800px; }
+
+        .hub-card {
+            width: 340px; background: var(--panel); border: 1px solid var(--border);
+            border-radius: 16px; padding: 40px 30px; text-align: center;
+            transition: all 0.3s ease; cursor: pointer; text-decoration: none; color: inherit;
+        }
+        .hub-card:hover {
+            border-color: var(--accent); transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(97, 175, 239, 0.15);
+            text-decoration: none;
+        }
+        .hub-card .icon { font-size: 3em; margin-bottom: 16px; display: block; }
+        .hub-card h2 { font-size: 1.4em; margin-bottom: 8px; color: var(--text); }
+        .hub-card p { color: var(--text-muted); font-size: 0.95em; line-height: 1.5; }
+
+        .hub-card.builder { border-top: 3px solid var(--green); }
+        .hub-card.builder:hover { border-color: var(--green); box-shadow: 0 8px 30px rgba(152, 195, 121, 0.15); }
+        .hub-card.arena { border-top: 3px solid var(--purple); }
+        .hub-card.arena:hover { border-color: var(--purple); box-shadow: 0 8px 30px rgba(198, 120, 221, 0.15); }
+
+        .footer {
+            padding: 20px; text-align: center;
+            color: var(--text-muted); font-size: 0.8em;
+            border-top: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <span class="brand">⚔️ MTG Commander Arena</span>
+        <a href="/" class="active">Hub</a>
+        <a href="/builder.html">Deck Builder</a>
+        <a href="/Arena.html">Play</a>
+    </nav>
+
+    <main class="hero">
+        <h1>MTG Commander Arena</h1>
+        <p class="subtitle">Build your deck, then battle your friends — all from one place.</p>
+
+        <div class="card-row">
+            <a href="/builder.html" class="hub-card builder">
+                <span class="icon">🛠️</span>
+                <h2>Deck Builder</h2>
+                <p>Import decks from Moxfield, add cards manually, or load existing deck files. Manage your library, commanders, and tokens.</p>
+            </a>
+            <a href="/Arena.html" class="hub-card arena">
+                <span class="icon">⚔️</span>
+                <h2>Play Arena</h2>
+                <p>Join a LAN game with up to 4 players. Load your deck, draw cards, and battle in real-time with drag-and-drop gameplay.</p>
+            </a>
+        </div>
+    </main>
+
+    <footer class="footer">
+        MTG Commander Arena — Local Multiplayer Magic: The Gathering
+    </footer>
+</body>
+</html>
