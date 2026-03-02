@@ -782,7 +782,13 @@
     <div id="logPanel">
         <div class="log-header">
             <span>Game Log</span>
-            <button onclick="toggleLogPanel()" style="background:none;border:none;color:#888;cursor:pointer;">✕</button>
+            <div style="display:flex; gap:4px;">
+                <button onclick="copyFullLog()"
+                    style="background:#444;border:1px solid #555;color:#aaa;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:0.85em;">📋
+                    Copy</button>
+                <button onclick="toggleLogPanel()"
+                    style="background:none;border:none;color:#888;cursor:pointer;">✕</button>
+            </div>
         </div>
         <div class="log-body" id="logBody"></div>
     </div>
@@ -860,6 +866,22 @@
             document.getElementById('logPanel').classList.toggle('visible');
         }
 
+        function copyFullLog() {
+            const lines = logEntries.map(entry => {
+                const t = new Date(entry.time);
+                const ts = `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}:${t.getSeconds().toString().padStart(2, '0')}`;
+                // Render the text body of each entry inline
+                const div = document.createElement('div');
+                renderLogEntryInto(div, entry);
+                return `[${ts}] ${div.textContent}`;
+            });
+            navigator.clipboard.writeText(lines.join('\n'));
+            const btn = document.querySelector('#logPanel .log-header button');
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied';
+            setTimeout(() => btn.textContent = orig, 1500);
+        }
+
         let logEntries = [];
 
         function appendLogEntry(entry) {
@@ -907,6 +929,12 @@
         function renderLogEntry(entry) {
             const body = document.getElementById('logBody');
             const div = document.createElement('div');
+            renderLogEntryInto(div, entry);
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function renderLogEntryInto(div, entry) {
             div.className = 'log-entry';
             const t = new Date(entry.time);
             const timeStr = `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}:${t.getSeconds().toString().padStart(2, '0')}`;
@@ -959,8 +987,6 @@
 
             div.style.color = color;
             div.innerHTML = `<span class="log-time">[${timeStr}]</span> ${text}`;
-            body.appendChild(div);
-            body.scrollTop = body.scrollHeight;
         }
 
         function checkViewports() {
@@ -1448,8 +1474,18 @@
                 hoverZone = null;
             }
         });
+        // --- Client-side key-repeat throttle (max 5 per second per key) ---
+        const keyThrottles = {};
+        function isKeyThrottled(key) {
+            const now = Date.now();
+            if (keyThrottles[key] && (now - keyThrottles[key]) < 200) return true;
+            keyThrottles[key] = now;
+            return false;
+        }
 
         document.addEventListener('keydown', e => {
+            // Throttle held-key repeats (allow first press, rate-limit repeats)
+            if (e.repeat && isKeyThrottled(e.key)) return;
             // --- 1. HANDLE MODAL SHORTCUTS (1, 2, 3) ---
             if (document.getElementById('dropModal').style.display === 'flex') {
                 if (e.key === '1') resolveLibDrop('top');

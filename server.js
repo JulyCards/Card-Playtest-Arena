@@ -522,15 +522,6 @@ function broadcastState() {
 io.on('connection', (socket) => {
     console.log(`[Connect] ${socket.id}`);
 
-    // --- Per-socket rate limiting ---
-    const rateLimits = {};
-    function throttled(eventName) {
-        const now = Date.now();
-        if (rateLimits[eventName] && (now - rateLimits[eventName]) < 50) return true;
-        rateLimits[eventName] = now;
-        return false;
-    }
-
     socket.emit('updateImageCache', globalImageCache);
     socket.emit('gameLogFull', gameLog); // Send full log on connect
     if (gameState.players.length > 0) broadcastState();
@@ -609,7 +600,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('untapAll', ({ pid }) => {
-        if (throttled('untapAll')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (!p) return;
         p.battlefield.forEach(c => {
@@ -663,7 +653,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('moveCard', (payload) => {
-        if (throttled('moveCard')) return;
         const { fromPid, fromZone, toPid, toZone, uid, x, y, method, index } = payload;
         // Get card name before move
         const srcP = gameState.players.find(p => p.id === fromPid);
@@ -685,7 +674,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('reorderZone', ({ pid, zone, uid, targetUid }) => {
-        if (throttled('reorderZone')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (!p) return;
         const list = p[zone];
@@ -714,7 +702,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('cardUpdate', ({ pid, zone, uid, updates }) => {
-        if (throttled('cardUpdate')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (!p) return;
         const card = p[zone].find(c => c.uid === uid);
@@ -753,7 +740,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('shuffle', ({ pid }) => {
-        if (throttled('shuffle')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (p) shuffle(p.library);
         addLogEntry({ type: 'shuffle', pid, playerName: getPlayerName(pid) });
