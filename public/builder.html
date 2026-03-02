@@ -154,13 +154,15 @@
         .mini-btn {
             font-size: 0.7em;
             padding: 4px;
-            width: 80%;
+            width: 100%;
             background: #444;
             border: 1px solid #666;
             cursor: pointer;
             color: #eee;
             border-radius: 4px;
             transition: 0.2s;
+            text-align: left;
+            white-space: nowrap;
         }
 
         .mini-btn:hover {
@@ -186,6 +188,92 @@
             line-height: 20px;
             font-size: 12px;
             pointer-events: none;
+        }
+
+        /* --- Context Menu (right-click) --- */
+        #cardContextMenu {
+            position: fixed;
+            background: #2a2a2a;
+            border: 1px solid #666;
+            border-radius: 6px;
+            padding: 4px;
+            min-width: 140px;
+            z-index: 1001;
+            display: none;
+            flex-direction: column;
+            gap: 2px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+        }
+
+        /* --- Drag and Drop --- */
+        .visual-card[draggable] {
+            cursor: grab;
+        }
+
+        .visual-card.dragging {
+            opacity: 0.3;
+        }
+
+        .visual-card.drag-over {
+            border: 2px solid var(--accent);
+            transform: scale(1.08);
+        }
+
+        .card-grid.drag-over-zone {
+            outline: 2px dashed var(--accent);
+            outline-offset: -2px;
+        }
+
+        /* Remove old hover overlay */
+        .overlay {
+            display: none !important;
+        }
+
+        .visual-card:hover .overlay {
+            display: none !important;
+        }
+
+        /* --- Magnify Modal --- */
+        #magnifyModal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        #magnifyModal img {
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(255, 255, 255, 0.15);
+        }
+
+        /* --- Zone Sort (2-tiered) --- */
+        .zone-sort-bar {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+            margin-left: auto;
+            font-size: 0.7em;
+        }
+
+        .zone-sort-bar select {
+            background: #333;
+            color: #ccc;
+            border: 1px solid #555;
+            border-radius: 3px;
+            padding: 1px 2px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+
+        .zone-sort-bar .sort-label {
+            color: #888;
+            font-size: 0.9em;
         }
 
         /* --- Loading Screen --- */
@@ -274,13 +362,36 @@
 
             <div class="file-input-wrapper">
                 <label>Front Image (Required)</label>
-                <input type="file" id="manFront" accept="image/*">
+                <input type="file" id="manFront" accept="image/*" onchange="autoFillName()">
             </div>
             <div class="file-input-wrapper">
                 <label>Back Image (Optional)</label>
                 <input type="file" id="manBack" accept="image/*">
             </div>
             <input type="text" id="manName" placeholder="Card Name">
+
+            <details style="margin: 5px 0;">
+                <summary style="cursor:pointer; font-size:0.8em; color:var(--text-muted);">Card Details (Optional)
+                </summary>
+                <div style="padding:5px 0; display:flex; flex-direction:column; gap:4px;">
+                    <textarea id="manOracle" placeholder="Rules Text" rows="3"
+                        style="resize:vertical; font-size:0.85em;"></textarea>
+                    <input type="text" id="manManaCost" placeholder="Mana Cost (e.g. {2}{U}{U})">
+                    <input type="text" id="manManaValue" placeholder="Mana Value (auto from cost if blank)">
+                    <input type="text" id="manTypeLine" placeholder="Type Line (e.g. Creature \u2014 Human)"
+                        oninput="this.value=this.value.replace(/ - /g,' \u2014 ').replace(/(?<=\w)-(?=\w)/g,'\u2014')">
+                    <div style="display:flex; gap:5px;">
+                        <input type="text" id="manPower" placeholder="Power" style="flex:1;">
+                        <input type="text" id="manToughness" placeholder="Toughness" style="flex:1;">
+                    </div>
+                    <input type="text" id="manColors" placeholder="Colors (e.g. W,U,B,R,G)">
+                    <input type="text" id="manColorId" placeholder="Color ID (auto from colors if blank)">
+                    <input type="text" id="manKeywords" placeholder="Keywords (comma-separated)">
+                    <label style="font-size:0.8em; color:var(--text-muted); display:flex; align-items:center; gap:5px;">
+                        <input type="checkbox" id="manDFC"> Double-Faced Card
+                    </label>
+                </div>
+            </details>
             <button class="btn-block" onclick="manualAdd()">➕ Add Single Card</button>
 
             <div style="border-top:1px dashed #444; margin-top:5px; padding-top:5px;">
@@ -308,23 +419,113 @@
         <div class="deck-view">
             <div class="zone-container" style="flex: 0 0 200px;">
                 <div class="zone-header" style="border-color: var(--gold);">COMMAND ZONE <span id="cnt-command">0</span>
+                    <div class="zone-sort-bar">
+                        <select id="sort1-command">
+                            <option value="">Sort…</option>
+                            <option value="name">Name</option>
+                            <option value="mv">MV</option>
+                            <option value="color">Color</option>
+                            <option value="type">Type</option>
+                            <option value="rarity">Rarity</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <select id="dir1-command">
+                            <option value="asc">↑</option>
+                            <option value="desc">↓</option>
+                        </select>
+                        <span class="sort-label">then</span>
+                        <select id="sort2-command">
+                            <option value="">None</option>
+                            <option value="name">Name</option>
+                            <option value="mv">MV</option>
+                            <option value="color">Color</option>
+                            <option value="type">Type</option>
+                            <option value="rarity">Rarity</option>
+                        </select>
+                        <select id="dir2-command">
+                            <option value="asc">↑</option>
+                            <option value="desc">↓</option>
+                        </select>
+                        <button onclick="applySort('command')"
+                            style="background:#555;color:#eee;border:1px solid #777;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:1em;">✔</button>
+                    </div>
                 </div>
                 <div class="zone-content">
-                    <div class="card-grid" id="grid-command"></div>
+                    <div class="card-grid" id="grid-command" data-zone="command"></div>
                 </div>
             </div>
             <div class="zone-container">
                 <div class="zone-header" style="border-color: var(--green);">LIBRARY <span id="cnt-library">0</span>
+                    <div class="zone-sort-bar">
+                        <select id="sort1-library">
+                            <option value="">Sort…</option>
+                            <option value="name">Name</option>
+                            <option value="mv">MV</option>
+                            <option value="color">Color</option>
+                            <option value="type">Type</option>
+                            <option value="rarity">Rarity</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <select id="dir1-library">
+                            <option value="asc">↑</option>
+                            <option value="desc">↓</option>
+                        </select>
+                        <span class="sort-label">then</span>
+                        <select id="sort2-library">
+                            <option value="">None</option>
+                            <option value="name">Name</option>
+                            <option value="mv">MV</option>
+                            <option value="color">Color</option>
+                            <option value="type">Type</option>
+                            <option value="rarity">Rarity</option>
+                        </select>
+                        <select id="dir2-library">
+                            <option value="asc">↑</option>
+                            <option value="desc">↓</option>
+                        </select>
+                        <button onclick="applySort('library')"
+                            style="background:#555;color:#eee;border:1px solid #777;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:1em;">✔</button>
+                    </div>
                 </div>
                 <div class="zone-content">
-                    <div class="card-grid" id="grid-library"></div>
+                    <div class="card-grid" id="grid-library" data-zone="library"></div>
                 </div>
             </div>
             <div class="zone-container" style="flex: 0 0 180px;">
                 <div class="zone-header" style="border-color: var(--purple);">TOKENS <span id="cnt-tokens">0</span>
+                    <div class="zone-sort-bar">
+                        <select id="sort1-tokens">
+                            <option value="">Sort…</option>
+                            <option value="name">Name</option>
+                            <option value="mv">MV</option>
+                            <option value="color">Color</option>
+                            <option value="type">Type</option>
+                            <option value="rarity">Rarity</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <select id="dir1-tokens">
+                            <option value="asc">↑</option>
+                            <option value="desc">↓</option>
+                        </select>
+                        <span class="sort-label">then</span>
+                        <select id="sort2-tokens">
+                            <option value="">None</option>
+                            <option value="name">Name</option>
+                            <option value="mv">MV</option>
+                            <option value="color">Color</option>
+                            <option value="type">Type</option>
+                            <option value="rarity">Rarity</option>
+                        </select>
+                        <select id="dir2-tokens">
+                            <option value="asc">↑</option>
+                            <option value="desc">↓</option>
+                        </select>
+                        <button onclick="applySort('tokens')"
+                            style="background:#555;color:#eee;border:1px solid #777;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:1em;">✔</button>
+                    </div>
                 </div>
                 <div class="zone-content">
-                    <div class="card-grid" id="grid-tokens"></div>
+                    <div class="card-grid" id="grid-tokens" data-zone="tokens"></div>
                 </div>
             </div>
         </div>
@@ -333,6 +534,178 @@
     <script>
         let deck = { command: [], library: [], tokens: [] };
         let pollInterval = null;
+
+        // === SORT (2-tiered) ===
+        const RARITY_ORDER = { common: 0, uncommon: 1, rare: 2, mythic: 3 };
+        const COLOR_ORDER = { W: 0, U: 1, B: 2, R: 3, G: 4 };
+
+        function compareField(a, b, field, mul) {
+            const am = a.meta || {}, bm = b.meta || {};
+            let av, bv;
+            if (field === 'name') { av = a.name || ''; bv = b.name || ''; return mul * av.localeCompare(bv); }
+            if (field === 'mv') { av = am.cmc ?? 99; bv = bm.cmc ?? 99; return mul * (av - bv); }
+            if (field === 'color') { av = COLOR_ORDER[(am.colors || [])[0]] ?? 9; bv = COLOR_ORDER[(bm.colors || [])[0]] ?? 9; return mul * (av - bv); }
+            if (field === 'type') { av = am.type_line || 'zzz'; bv = bm.type_line || 'zzz'; return mul * av.localeCompare(bv); }
+            if (field === 'rarity') { av = RARITY_ORDER[am.rarity] ?? 9; bv = RARITY_ORDER[bm.rarity] ?? 9; return mul * (av - bv); }
+            if (field === 'custom') { av = a._customOrder ?? 9999; bv = b._customOrder ?? 9999; return mul * (av - bv); }
+            return 0;
+        }
+
+        function applySort(zone) {
+            const f1 = document.getElementById('sort1-' + zone).value;
+            const d1 = document.getElementById('dir1-' + zone).value;
+            const f2 = document.getElementById('sort2-' + zone).value;
+            const d2 = document.getElementById('dir2-' + zone).value;
+            if (!f1) return;
+            const m1 = d1 === 'asc' ? 1 : -1;
+            const m2 = d2 === 'asc' ? 1 : -1;
+            deck[zone].sort((a, b) => {
+                const primary = compareField(a, b, f1, m1);
+                if (primary !== 0 || !f2) return primary;
+                return compareField(a, b, f2, m2);
+            });
+            syncDeck();
+            render();
+        }
+
+        function syncDeck() {
+            fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+        }
+
+        // === AUTO-FILL NAME FROM FILE ===
+        function autoFillName() {
+            const file = document.getElementById('manFront').files[0];
+            if (file && !document.getElementById('manName').value) {
+                const name = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                document.getElementById('manName').value = name;
+            }
+        }
+
+        // === MANA COST NORMALIZER ===
+        // Canonical hybrid pair ordering per MTG rules
+        const HYBRID_CANONICAL = {
+            'WU': 'W/U', 'UW': 'W/U', 'WB': 'W/B', 'BW': 'W/B', 'RW': 'R/W', 'WR': 'R/W', 'GW': 'G/W', 'WG': 'G/W',
+            'UB': 'U/B', 'BU': 'U/B', 'UR': 'U/R', 'RU': 'U/R', 'GU': 'G/U', 'UG': 'G/U',
+            'BR': 'B/R', 'RB': 'B/R', 'BG': 'B/G', 'GB': 'B/G', 'RG': 'R/G', 'GR': 'R/G'
+        };
+        const MANA_COLOR_POS = { W: 10, U: 20, B: 30, R: 40, G: 50 };
+
+        function normalizeManaCost(input) {
+            if (!input || !input.trim()) return { result: null };
+            const tokens = input.trim().split(/\s+/);
+            const symbols = [];
+
+            for (const raw of tokens) {
+                let token = raw.replace(/[{}]/g, '');
+
+                // Check each slash-segment for >2 consecutive characters
+                const segments = token.split('/');
+                for (const seg of segments) {
+                    if (seg.length > 2 && !/^\d+$/.test(seg)) {
+                        return { error: `"${raw}" — too many consecutive characters. Separate symbols with spaces (e.g. "2 U U" not "2UU").` };
+                    }
+                }
+
+                // Extract all meaningful characters
+                const allChars = token.replace(/\//g, '').toUpperCase();
+
+                // Check for illegal characters
+                if (!/^[WUBRGCPX0-9]+$/.test(allChars)) {
+                    return { error: `"${raw}" contains illegal characters. Legal: W, U, B, R, G, C, P, X, 0-9.` };
+                }
+
+                const colorChars = [...allChars].filter(c => 'WUBRG'.includes(c));
+                const uniqueColors = [...new Set(colorChars)];
+                const hasP = allChars.includes('P');
+                const nums = [...allChars].filter(c => /\d/.test(c));
+                const hasX = allChars.includes('X');
+                const hasC = allChars.includes('C');
+
+                if (allChars.length === 0) continue;
+
+                // Single character
+                if (allChars.length === 1) {
+                    if (/\d/.test(allChars)) {
+                        symbols.push({ display: `{${allChars}}`, sortKey: -10 + parseInt(allChars) });
+                    } else if (hasX) {
+                        symbols.push({ display: '{X}', sortKey: -20 });
+                    } else if (hasC) {
+                        symbols.push({ display: '{C}', sortKey: 5 });
+                    } else if (uniqueColors.length === 1) {
+                        symbols.push({ display: `{${uniqueColors[0]}}`, sortKey: MANA_COLOR_POS[uniqueColors[0]] });
+                    }
+                    continue;
+                }
+
+                // Multi-digit generic (e.g. "10", "15")
+                if (/^\d+$/.test(allChars)) {
+                    symbols.push({ display: `{${allChars}}`, sortKey: -10 + parseInt(allChars) });
+                    continue;
+                }
+
+                // Phyrexian hybrid: 3 unique chars (2 colors + P)
+                if (uniqueColors.length === 2 && hasP) {
+                    const pair = HYBRID_CANONICAL[uniqueColors[0] + uniqueColors[1]];
+                    if (!pair) return { error: `"${raw}" is not a valid color pair.` };
+                    symbols.push({ display: `{${pair}/P}`, sortKey: (MANA_COLOR_POS[uniqueColors[0]] + MANA_COLOR_POS[uniqueColors[1]]) / 2 + 0.5 });
+                    continue;
+                }
+
+                // Hybrid: 2 colors, no P, no numbers
+                if (uniqueColors.length === 2 && !hasP && nums.length === 0) {
+                    const pair = HYBRID_CANONICAL[uniqueColors[0] + uniqueColors[1]];
+                    if (!pair) return { error: `"${raw}" is not a valid color pair.` };
+                    symbols.push({ display: `{${pair}}`, sortKey: (MANA_COLOR_POS[uniqueColors[0]] + MANA_COLOR_POS[uniqueColors[1]]) / 2 });
+                    continue;
+                }
+
+                // Twobrid: 1 color + a number
+                if (uniqueColors.length === 1 && nums.length >= 1 && !hasP) {
+                    symbols.push({ display: `{2/${uniqueColors[0]}}`, sortKey: MANA_COLOR_POS[uniqueColors[0]] - 2 });
+                    continue;
+                }
+
+                // Phyrexian: 1 color + P
+                if (uniqueColors.length === 1 && hasP && nums.length === 0) {
+                    symbols.push({ display: `{${uniqueColors[0]}/P}`, sortKey: MANA_COLOR_POS[uniqueColors[0]] + 1 });
+                    continue;
+                }
+
+                return { error: `"${raw}" is not a valid mana symbol.` };
+            }
+
+            // Sort: X first, then generic ascending, colorless, then colors in WUBRG order
+            symbols.sort((a, b) => a.sortKey - b.sortKey);
+            return { result: symbols.map(s => s.display).join('') };
+        }
+
+        // Parse mana value from normalized cost string (already in {X}{2}{U} format)
+        function parseManaValue(cost) {
+            if (!cost) return null;
+            let total = 0;
+            const symbols = cost.match(/\{[^}]+\}/g) || [];
+            for (const s of symbols) {
+                const inner = s.replace(/[{}]/g, '');
+                const num = parseInt(inner);
+                if (!isNaN(num)) total += num;
+                else if (inner !== 'X') total += 1;
+            }
+            return total;
+        }
+        function parseColors(cost) {
+            if (!cost) return [];
+            const colors = new Set();
+            const symbols = cost.match(/\{[^}]+\}/g) || [];
+            for (const s of symbols) {
+                const inner = s.replace(/[{}]/g, '').toUpperCase();
+                for (const c of ['W', 'U', 'B', 'R', 'G']) { if (inner.includes(c)) colors.add(c); }
+            }
+            return sortColors([...colors]);
+        }
+        function sortColors(arr) {
+            const order = ['W', 'U', 'B', 'R', 'G'];
+            return arr.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+        }
 
         // === IMPORT LOGIC ===
         // Moxfield API is fetched server-side to bypass CORS and Cloudflare.
@@ -425,7 +798,8 @@
                         name: c.name,
                         front: c.front || c.image,
                         back: c.back || c.backImage,
-                        is_flipped: false
+                        is_flipped: false,
+                        meta: c.meta || null
                     });
 
                     deck = {
@@ -460,15 +834,44 @@
             let backB64 = null;
             if (backFile) backB64 = await toBase64(backFile);
 
-            const payload = { zone, name, front: frontB64, back: backB64 };
+            const manaCostRaw = document.getElementById('manManaCost').value || null;
+            let manaCost = null;
+            if (manaCostRaw) {
+                const normalized = normalizeManaCost(manaCostRaw);
+                if (normalized.error) {
+                    alert('⚠️ Invalid Mana Cost:\n\n' + normalized.error + '\n\nPlease re-enter. Use spaces between symbols (e.g. "2 U U").');
+                    document.getElementById('manManaCost').value = '';
+                    return;
+                }
+                manaCost = normalized.result;
+            }
+            const mvField = document.getElementById('manManaValue').value;
+            const cmc = mvField ? parseFloat(mvField) : parseManaValue(manaCost);
+            const colorsField = document.getElementById('manColors').value;
+            const colors = sortColors(colorsField ? colorsField.split(',').map(c => c.trim().toUpperCase()).filter(Boolean) : parseColors(manaCost));
+            const colorIdField = document.getElementById('manColorId').value;
+            const color_identity = sortColors(colorIdField ? colorIdField.split(',').map(c => c.trim().toUpperCase()).filter(Boolean) : [...colors]);
+            const kwField = document.getElementById('manKeywords').value;
+            const keywords = kwField ? kwField.split(',').map(k => k.trim()).filter(Boolean) : [];
+
+            const payload = {
+                zone, name, front: frontB64, back: backB64,
+                oracle_text: document.getElementById('manOracle').value || null,
+                mana_cost: manaCost,
+                cmc,
+                type_line: document.getElementById('manTypeLine').value || null,
+                power: document.getElementById('manPower').value || null,
+                toughness: document.getElementById('manToughness').value || null,
+                colors, color_identity, keywords,
+                is_dfc: document.getElementById('manDFC').checked
+            };
             const res = await fetch('/api/builder/add-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
             deck = data.deck;
             render();
 
-            document.getElementById('manFront').value = "";
-            document.getElementById('manBack').value = "";
-            document.getElementById('manName').value = "";
+            ['manFront', 'manBack', 'manName', 'manOracle', 'manManaCost', 'manManaValue', 'manTypeLine', 'manPower', 'manToughness', 'manColors', 'manColorId', 'manKeywords'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('manDFC').checked = false;
         }
 
         // === BULK ADD ===
@@ -526,26 +929,181 @@
         }
 
         function renderZone(elId, cards, zoneName) {
-            const el = document.getElementById(elId);
-            el.innerHTML = '';
+            const oldEl = document.getElementById(elId);
+            // Clone to strip ALL prior event listeners (prevents handler accumulation)
+            const el = oldEl.cloneNode(false);
+            oldEl.parentNode.replaceChild(el, oldEl);
+
+            // Zone-level drop target for empty zones and dropping at end
+            el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over-zone'); });
+            el.addEventListener('dragleave', () => el.classList.remove('drag-over-zone'));
+            el.addEventListener('drop', (e) => {
+                e.preventDefault();
+                el.classList.remove('drag-over-zone');
+                const srcZone = e.dataTransfer.getData('zone');
+                const srcIdx = parseInt(e.dataTransfer.getData('idx'));
+                if (isNaN(srcIdx)) return;
+                const card = deck[srcZone].splice(srcIdx, 1)[0];
+                deck[zoneName].push(card);
+                updateCustomOrder(zoneName);
+                if (srcZone !== zoneName) updateCustomOrder(srcZone);
+                syncDeck();
+                render();
+            });
+
             cards.forEach((c, i) => {
                 const div = document.createElement('div');
                 div.className = 'visual-card';
+                div.draggable = true;
                 const currentImg = (c.is_flipped && c.back) ? c.back : c.front;
 
                 div.innerHTML = `
-                    <img src="${currentImg}">
+                    <img src="${currentImg}" draggable="false">
                     ${c.back ? '<div class="flip-icon">🔄</div>' : ''}
-                    <div class="overlay">
-                        ${c.back ? `<button class="mini-btn" onclick="flipCard('${zoneName}', ${i})">Flip View</button>` : ''}
-                        ${zoneName !== 'command' ? `<button class="mini-btn" onclick="move('${zoneName}','command',${i})">To Command</button>` : ''}
-                        ${zoneName !== 'library' ? `<button class="mini-btn" onclick="move('${zoneName}','library',${i})">To Library</button>` : ''}
-                        ${zoneName !== 'tokens' ? `<button class="mini-btn" onclick="move('${zoneName}','tokens',${i})">To Token</button>` : ''}
-                        <button class="mini-btn del" onclick="del('${zoneName}',${i})">Remove</button>
-                    </div>
                 `;
+
+                // Drag start
+                div.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('zone', zoneName);
+                    e.dataTransfer.setData('idx', i.toString());
+                    div.classList.add('dragging');
+                });
+                div.addEventListener('dragend', () => div.classList.remove('dragging'));
+
+                // Drop on card (insert before)
+                div.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    div.classList.add('drag-over');
+                });
+                div.addEventListener('dragleave', () => div.classList.remove('drag-over'));
+                div.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    div.classList.remove('drag-over');
+                    const srcZone = e.dataTransfer.getData('zone');
+                    const srcIdx = parseInt(e.dataTransfer.getData('idx'));
+                    if (isNaN(srcIdx)) return;
+                    // No-op: dropping card on itself
+                    if (srcZone === zoneName && srcIdx === i) return;
+                    // Determine if dropping on top or bottom half of target card
+                    const rect = div.getBoundingClientRect();
+                    const dropOnBottom = (e.clientY - rect.top) > rect.height / 2;
+                    // Remove card from source first
+                    const card = deck[srcZone].splice(srcIdx, 1)[0];
+                    // Calculate target index in the (now modified) array
+                    let targetIdx = (srcZone === zoneName && srcIdx < i) ? i - 1 : i;
+                    if (dropOnBottom) targetIdx++;
+                    targetIdx = Math.max(0, Math.min(targetIdx, deck[zoneName].length));
+                    deck[zoneName].splice(targetIdx, 0, card);
+                    updateCustomOrder(zoneName);
+                    if (srcZone !== zoneName) updateCustomOrder(srcZone);
+                    syncDeck();
+                    render();
+                });
+
+                // Right-click context menu
+                div.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    showContextMenu(e.clientX, e.clientY, zoneName, i);
+                });
+
+                // Shift+click to magnify
+                div.addEventListener('click', (e) => {
+                    if (e.shiftKey) {
+                        e.stopPropagation();
+                        const modal = document.getElementById('magnifyModal');
+                        modal.querySelector('img').src = currentImg;
+                        modal.style.display = 'flex';
+                    }
+                });
                 el.appendChild(div);
             });
+        }
+
+        // === CUSTOM ORDER TRACKING ===
+        function updateCustomOrder(zone) {
+            deck[zone].forEach((c, i) => c._customOrder = i);
+        }
+
+        // === CONTEXT MENU ===
+        let ctxZone = '', ctxIdx = 0;
+        function showContextMenu(x, y, zone, idx) {
+            ctxZone = zone; ctxIdx = idx;
+            const menu = document.getElementById('cardContextMenu');
+            const c = deck[zone][idx];
+            menu.innerHTML = '';
+            if (c.back) addCtxBtn(menu, '🔄 Flip View', () => flipCard(ctxZone, ctxIdx));
+            addCtxBtn(menu, '📷 Change Image', () => changeImage(ctxZone, ctxIdx));
+            addCtxBtn(menu, '🔎 View Meta', () => viewMeta(ctxZone, ctxIdx));
+            addCtxBtn(menu, '❌ Remove', () => del(ctxZone, ctxIdx), true);
+            menu.style.left = Math.min(x, window.innerWidth - 160) + 'px';
+            menu.style.top = Math.min(y, window.innerHeight - 150) + 'px';
+            menu.style.display = 'flex';
+        }
+        function addCtxBtn(menu, label, fn, isDel) {
+            const btn = document.createElement('button');
+            btn.className = 'mini-btn' + (isDel ? ' del' : '');
+            btn.textContent = label;
+            btn.onclick = () => { menu.style.display = 'none'; fn(); };
+            menu.appendChild(btn);
+        }
+        // Close context menu on click elsewhere
+        document.addEventListener('click', () => {
+            document.getElementById('cardContextMenu').style.display = 'none';
+        });
+        // Disable default context menu on card grids
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.card-grid').forEach(g => {
+                g.addEventListener('contextmenu', e => e.preventDefault());
+            });
+        });
+
+        // === CHANGE IMAGE ===
+        function changeImage(zone, idx) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = async () => {
+                const file = input.files[0];
+                if (!file) return;
+                const b64 = await toBase64(file);
+                // Optimize via server
+                const res = await fetch('/api/builder/optimize-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: b64 })
+                });
+                const data = await res.json();
+                deck[zone][idx].front = data.image || b64;
+                fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+                render();
+            };
+            input.click();
+        }
+
+        // === VIEW META (debug) ===
+        function viewMeta(zone, idx) {
+            const c = deck[zone][idx];
+            const m = c.meta;
+            if (!m) return alert(`${c.name}\n\nNo metadata available.`);
+            const lines = [
+                `Name: ${c.name}`,
+                `Type: ${m.type_line || '\u2014'}`,
+                `Mana Cost: ${m.mana_cost || '\u2014'}`,
+                `Mana Value: ${m.cmc ?? '\u2014'}`,
+                `Colors: ${(m.colors || []).join(', ') || '\u2014'}`,
+                `Color ID: ${(m.color_identity || []).join(', ') || '\u2014'}`,
+                `Keywords: ${(m.keywords || []).join(', ') || '\u2014'}`,
+                m.power != null ? `P/T: ${m.power}/${m.toughness}` : null,
+                `Rarity: ${m.rarity || '\u2014'}`,
+                `Set: ${m.set_name || '\u2014'}`,
+                `DFC: ${m.is_dfc ? 'Yes' : 'No'}`,
+                `\n--- Oracle Text ---`,
+                m.oracle_text || '(none)',
+                m.back_oracle_text ? `\n--- Back Face ---\n${m.back_type_line || ''}\n${m.back_oracle_text}` : null
+            ].filter(Boolean);
+            alert(lines.join('\n'));
         }
 
         function flipCard(zone, idx) {
@@ -556,14 +1114,17 @@
         function move(from, to, idx) {
             const card = deck[from].splice(idx, 1)[0];
             deck[to].push(card);
-            fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+            updateCustomOrder(from);
+            updateCustomOrder(to);
+            syncDeck();
             render();
         }
 
         function del(zone, idx) {
             if (confirm("Delete card?")) {
                 deck[zone].splice(idx, 1);
-                fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+                updateCustomOrder(zone);
+                syncDeck();
                 render();
             }
         }
@@ -571,7 +1132,7 @@
         function resetAll() {
             if (confirm("Reset everything?")) {
                 deck = { command: [], library: [], tokens: [] };
-                fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+                syncDeck();
                 render();
             }
         }
@@ -595,11 +1156,19 @@
         }
 
         function cleanCard(c) {
-            return { id: c.id, name: c.name, image: c.front, backImage: c.back };
+            return { id: c.id, name: c.name, image: c.front, backImage: c.back, meta: c.meta || null };
         }
 
         function showLoading(show) { document.getElementById('loadingScreen').style.display = show ? 'flex' : 'none'; }
     </script>
+
+    <!-- Magnify Modal -->
+    <div id="magnifyModal" onclick="this.style.display='none'">
+        <img src="" alt="Magnified card">
+    </div>
+
+    <!-- Context Menu -->
+    <div id="cardContextMenu"></div>
 </body>
 
 </html>

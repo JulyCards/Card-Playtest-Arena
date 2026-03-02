@@ -130,16 +130,53 @@ async function processSingleCard(item, isToken = false) {
     console.log(`Fetching: ${name}`);
 
     let frontImg = null, backImg = null;
-    const meta = await fetchScryfallMetadata(sid, name);
+    let meta = {
+        oracle_text: null, mana_cost: null, cmc: null,
+        type_line: null, colors: [], color_identity: [],
+        keywords: [], power: null, toughness: null,
+        rarity: null, set_name: null, is_dfc: false,
+        back_oracle_text: null, back_type_line: null
+    };
 
-    if (meta) {
+    const scryfallData = await fetchScryfallMetadata(sid, name);
+
+    if (scryfallData) {
+        // Extract metadata
+        meta.mana_cost = scryfallData.mana_cost || null;
+        meta.cmc = scryfallData.cmc ?? null;
+        meta.type_line = scryfallData.type_line || null;
+        meta.colors = scryfallData.colors || [];
+        meta.color_identity = scryfallData.color_identity || [];
+        meta.keywords = scryfallData.keywords || [];
+        meta.power = scryfallData.power || null;
+        meta.toughness = scryfallData.toughness || null;
+        meta.rarity = scryfallData.rarity || null;
+        meta.set_name = scryfallData.set_name || null;
+        meta.oracle_text = scryfallData.oracle_text || null;
+
         try {
-            if (meta.card_faces && !meta.image_uris) {
-                frontImg = await safeDownload(meta.card_faces[0].image_uris.large);
-                backImg = await safeDownload(meta.card_faces[1].image_uris.large);
+            // Extract face-level metadata for ANY multi-face card (DFC, adventure, split, etc.)
+            if (scryfallData.card_faces && scryfallData.card_faces.length >= 2) {
+                const face0 = scryfallData.card_faces[0];
+                const face1 = scryfallData.card_faces[1];
+                meta.oracle_text = face0.oracle_text || meta.oracle_text;
+                meta.mana_cost = face0.mana_cost || meta.mana_cost;
+                meta.type_line = scryfallData.type_line || face0.type_line || meta.type_line;
+                meta.power = face0.power || meta.power;
+                meta.toughness = face0.toughness || meta.toughness;
+                meta.back_oracle_text = face1.oracle_text || null;
+                meta.back_type_line = face1.type_line || null;
+            }
+
+            // Handle images — DFCs have separate images per face, others use a shared image
+            if (scryfallData.card_faces && !scryfallData.image_uris) {
+                // True DFC (separate images per face)
+                meta.is_dfc = true;
+                frontImg = await safeDownload(scryfallData.card_faces[0].image_uris.large);
+                backImg = await safeDownload(scryfallData.card_faces[1].image_uris.large);
             } else {
-                let url = meta.image_uris ? meta.image_uris.large : null;
-                if (!url && meta.card_faces) url = meta.card_faces[0].image_uris.large;
+                let url = scryfallData.image_uris ? scryfallData.image_uris.large : null;
+                if (!url && scryfallData.card_faces) url = scryfallData.card_faces[0].image_uris.large;
                 frontImg = await safeDownload(url);
             }
         } catch (e) {
@@ -157,9 +194,10 @@ async function processSingleCard(item, isToken = false) {
         console.log(`[SUCCESS] ${name}`);
         const cardData = {
             id: `c_${Math.floor(10000 + Math.random() * 90000)}`,
-            name, front: frontImg, back: backImg, is_flipped: false
+            name, front: frontImg, back: backImg, is_flipped: false,
+            meta
         };
-        return Array.from({ length: qty }, () => ({ ...cardData }));
+        return Array.from({ length: qty }, () => ({ ...cardData, meta: { ...meta } }));
     } else {
         console.log(`[FAILED] ${name}`);
         return [];
@@ -304,18 +342,37 @@ app.post('/api/builder/sync', (req, res) => {
     res.json(activeDeck);
 });
 
-// Manual add card (with image optimization)
+// Manual add card (with image optimization + metadata)
 app.post('/api/builder/add-card', async (req, res) => {
     const data = req.body;
     try {
         const front = await optimizeImage(data.front);
         const back = data.back ? await optimizeImage(data.back) : null;
 
+        // Build metadata from provided fields or defaults
+        const meta = {
+            oracle_text: data.oracle_text || null,
+            mana_cost: data.mana_cost || null,
+            cmc: data.cmc ?? null,
+            type_line: data.type_line || null,
+            colors: data.colors || [],
+            color_identity: data.color_identity || [],
+            keywords: data.keywords || [],
+            power: data.power || null,
+            toughness: data.toughness || null,
+            rarity: null,
+            set_name: null,
+            is_dfc: !!back,
+            back_oracle_text: data.back_oracle_text || null,
+            back_type_line: data.back_type_line || null
+        };
+
         const newCard = {
             id: `m-${Date.now()}`,
             name: data.name || "New Card",
             front, back,
-            is_flipped: false
+            is_flipped: false,
+            meta
         };
 
         const zone = data.zone || 'library';
@@ -323,6 +380,16 @@ app.post('/api/builder/add-card', async (req, res) => {
         activeDeck[zone].push(newCard);
 
         res.json({ status: "ok", deck: activeDeck });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Optimize a single image (used by Change Image feature)
+app.post('/api/builder/optimize-image', async (req, res) => {
+    try {
+        const optimized = await optimizeImage(req.body.image);
+        res.json({ image: optimized });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
