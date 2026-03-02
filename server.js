@@ -196,7 +196,7 @@ async function processSingleCard(item, isToken = false) {
         const cardData = {
             id: `c_${Math.floor(10000 + Math.random() * 90000)}`,
             name, front: frontImg, back: backImg, is_flipped: false,
-            meta
+            meta, _modified: Date.now()
         };
         return Array.from({ length: qty }, () => ({ ...cardData, meta: { ...meta } }));
     } else {
@@ -224,7 +224,8 @@ async function runImportFromCards(deckName, commanders, library, tokens) {
 
         currentJob.total = commanders.length + library.length + tokens.length;
 
-        const newDeck = { deckName: deckName || "Imported", command: [], library: [], tokens: [] };
+        // Build only the imported cards — client will merge with existing deck
+        const imported = { deckName: deckName || "Imported", command: [], library: [], tokens: [] };
 
         const trackProcess = async (item, isTok = false) => {
             const res = await processSingleCard(item, isTok);
@@ -239,25 +240,24 @@ async function runImportFromCards(deckName, commanders, library, tokens) {
         for (let i = 0; i < commanders.length; i += MAX_WORKERS) {
             const batch = commanders.slice(i, i + MAX_WORKERS);
             const results = await Promise.all(batch.map(item => trackProcess(item)));
-            for (const r of results) newDeck.command.push(...r);
+            for (const r of results) imported.command.push(...r);
         }
 
         // Process library
         for (let i = 0; i < library.length; i += MAX_WORKERS) {
             const batch = library.slice(i, i + MAX_WORKERS);
             const results = await Promise.all(batch.map(item => trackProcess(item)));
-            for (const r of results) newDeck.library.push(...r);
+            for (const r of results) imported.library.push(...r);
         }
 
         // Process tokens
         for (let i = 0; i < tokens.length; i += MAX_WORKERS) {
             const batch = tokens.slice(i, i + MAX_WORKERS);
             const results = await Promise.all(batch.map(item => trackProcess(item, true)));
-            for (const r of results) newDeck.tokens.push(...r);
+            for (const r of results) imported.tokens.push(...r);
         }
 
-        activeDeck = newDeck;
-        currentJob.result = newDeck;
+        currentJob.result = imported;
         currentJob.done = true;
         currentJob.message = "Done!";
 
@@ -447,6 +447,18 @@ const NOUNS = ["Acacia", "Acanthus", "Acorn Squash", "Agapanthus", "Alfalfa", "A
 let gameState = { players: [], active: false };
 let socketOwner = {};
 let globalImageCache = {};
+let gameLog = []; // Dev log: full card movement history
+
+function addLogEntry(entry) {
+    entry.time = Date.now();
+    gameLog.push(entry);
+    io.emit('gameLog', entry);
+}
+
+function getPlayerName(pid) {
+    const p = gameState.players.find(x => x.id === pid);
+    return p ? p.name : pid;
+}
 
 function generateGuestName() {
     const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
@@ -510,7 +522,17 @@ function broadcastState() {
 io.on('connection', (socket) => {
     console.log(`[Connect] ${socket.id}`);
 
+    // --- Per-socket rate limiting ---
+    const rateLimits = {};
+    function throttled(eventName) {
+        const now = Date.now();
+        if (rateLimits[eventName] && (now - rateLimits[eventName]) < 50) return true;
+        rateLimits[eventName] = now;
+        return false;
+    }
+
     socket.emit('updateImageCache', globalImageCache);
+    socket.emit('gameLogFull', gameLog); // Send full log on connect
     if (gameState.players.length > 0) broadcastState();
 
     socket.on('registerPlayer', ({ deckData, displayName }) => {
@@ -564,6 +586,7 @@ io.on('connection', (socket) => {
         } else {
             existing.name = finalName;
         }
+        addLogEntry({ type: 'playerJoin', pid, playerName: finalName });
         broadcastState();
     });
 
@@ -586,9 +609,16 @@ io.on('connection', (socket) => {
     });
 
     socket.on('untapAll', ({ pid }) => {
+        if (throttled('untapAll')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (!p) return;
-        p.battlefield.forEach(c => { c.rotation = 0; });
+        p.battlefield.forEach(c => {
+            // Normalize rotation to 0-359 range to handle over-rotation
+            const norm = ((c.rotation || 0) % 360 + 360) % 360;
+            // Only untap sideways cards (90/270). Preserve 0 and 180 (upside-down for flip cards)
+            if (norm === 90 || norm === 270) c.rotation = 0;
+        });
+        addLogEntry({ type: 'untapAll', pid, playerName: getPlayerName(pid) });
         broadcastState();
     });
 
@@ -601,8 +631,9 @@ io.on('connection', (socket) => {
         if (pid) {
             const pIdx = gameState.players.findIndex(p => p.id === pid);
             if (pIdx > -1) {
-                // Clean up image cache for this player's cards
                 const player = gameState.players[pIdx];
+                addLogEntry({ type: 'playerLeave', pid, playerName: player.name });
+                // Clean up image cache for this player's cards
                 const allCards = [...player.library, ...player.hand, ...player.battlefield, ...player.graveyard, ...player.exile, ...player.command];
                 allCards.forEach(c => { if (c.uid) delete globalImageCache[c.uid]; });
                 (player.tokens || []).forEach(t => { if (t._cacheId) delete globalImageCache[t._cacheId]; });
@@ -613,10 +644,11 @@ io.on('connection', (socket) => {
             broadcastState();
         }
 
-        if (io.engine.clientsCount === 0) {
+        if (io.engine.clientsCount === 0 || gameState.players.length === 0) {
             gameState.players = [];
             socketOwner = {};
             globalImageCache = {};
+            gameLog = [];
         }
     });
 
@@ -624,18 +656,36 @@ io.on('connection', (socket) => {
         gameState.players = [];
         socketOwner = {};
         globalImageCache = {};
+        gameLog = [];
         io.emit('updateImageCache', {});
         broadcastState();
         io.emit('resetClient');
     });
 
     socket.on('moveCard', (payload) => {
+        if (throttled('moveCard')) return;
         const { fromPid, fromZone, toPid, toZone, uid, x, y, method, index } = payload;
+        // Get card name before move
+        const srcP = gameState.players.find(p => p.id === fromPid);
+        const card = srcP ? (uid ? srcP[fromZone].find(c => c.uid === uid) : srcP[fromZone][0]) : null;
+        const cardName = card ? (card.name || 'Unknown') : 'Unknown';
         doMoveCard(fromPid, fromZone, toPid, toZone, uid, x, y, method, index);
+        // Log the move (skip same-zone rearranging)
+        if (fromZone === toZone && fromPid === toPid) { broadcastState(); return; }
+        let dest = toZone;
+        if (toZone === 'library') {
+            const methodLabel = { top: 'Top', bottom: 'Bottom', shuffle: 'Shuffle' };
+            dest = `Library, ${methodLabel[method] || 'Top'}`;
+        }
+        addLogEntry({
+            type: 'move', cardName, fromZone, toZone, fromPid, toPid, method, dest,
+            fromPlayerName: getPlayerName(fromPid), toPlayerName: getPlayerName(toPid)
+        });
         broadcastState();
     });
 
     socket.on('reorderZone', ({ pid, zone, uid, targetUid }) => {
+        if (throttled('reorderZone')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (!p) return;
         const list = p[zone];
@@ -644,6 +694,10 @@ io.on('connection', (socket) => {
         if (oldIdx > -1 && newIdx > -1) {
             const [item] = list.splice(oldIdx, 1);
             list.splice(newIdx, 0, item);
+            // Log library rearranges (cheat-relevant)
+            if (zone === 'library') {
+                addLogEntry({ type: 'reorder', pid, zone, playerName: getPlayerName(pid) });
+            }
             broadcastState();
         }
     });
@@ -660,17 +714,55 @@ io.on('connection', (socket) => {
     });
 
     socket.on('cardUpdate', ({ pid, zone, uid, updates }) => {
+        if (throttled('cardUpdate')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (!p) return;
         const card = p[zone].find(c => c.uid === uid);
-        if (card) Object.assign(card, updates);
+        if (!card) return;
+
+        // Log counter changes
+        if (updates.counters) {
+            const oldCounters = card.counters || [];
+            const newCounters = updates.counters;
+            if (newCounters.length > oldCounters.length) {
+                const added = newCounters[newCounters.length - 1];
+                addLogEntry({ type: 'counterAdd', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown', counter: added });
+            } else if (newCounters.length < oldCounters.length) {
+                addLogEntry({ type: 'counterRemove', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown' });
+            } else {
+                // Same length = adjustment
+                for (let i = 0; i < newCounters.length; i++) {
+                    if (newCounters[i] !== oldCounters[i]) {
+                        addLogEntry({ type: 'counterChange', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown', counter: newCounters[i] });
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Log rotation (tap/untap)
+        if (updates.rotation !== undefined && updates.rotation !== card.rotation) {
+            const normNew = ((updates.rotation % 360) + 360) % 360;
+            if (normNew === 90 || normNew === 270) {
+                addLogEntry({ type: 'tap', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown' });
+            }
+        }
+
+        Object.assign(card, updates);
         broadcastState();
     });
 
     socket.on('shuffle', ({ pid }) => {
+        if (throttled('shuffle')) return;
         const p = gameState.players.find(x => x.id === pid);
         if (p) shuffle(p.library);
+        addLogEntry({ type: 'shuffle', pid, playerName: getPlayerName(pid) });
         broadcastState();
+    });
+
+    socket.on('openInspect', ({ pid, zone }) => {
+        const ownerPid = socketOwner[socket.id];
+        addLogEntry({ type: 'inspect', pid: ownerPid || 'unknown', playerName: getPlayerName(ownerPid || 'unknown'), targetPid: pid, targetPlayerName: getPlayerName(pid), zone });
     });
 
     socket.on('deleteCard', ({ pid, zone, uid }) => {

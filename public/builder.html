@@ -317,6 +317,194 @@
             display: block;
             margin-top: 5px;
         }
+
+        /* --- Duplicate Resolution Modal --- */
+        #dupModal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.92);
+            z-index: 1002;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #dupModal .dup-box {
+            background: #1e1e1e;
+            border: 1px solid #555;
+            border-radius: 10px;
+            padding: 20px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        #dupModal h3 {
+            margin: 0 0 10px;
+            color: var(--accent);
+        }
+
+        #dupModal .dup-zone-label {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: var(--gold);
+            margin: 10px 0 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #dupModal .dup-pair {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+
+        #dupModal .dup-pair img {
+            width: 90px;
+            border-radius: 4px;
+            border: 1px solid #555;
+        }
+
+        #dupModal .dup-pair .dup-label {
+            font-size: 0.75em;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 3px;
+        }
+
+        #dupModal .dup-info {
+            flex: 1;
+        }
+
+        #dupModal .dup-info .card-name {
+            font-weight: bold;
+            font-size: 1.05em;
+            margin-bottom: 6px;
+        }
+
+        #dupModal .dup-btns {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        #dupModal .dup-btns button {
+            font-size: 0.8em;
+            padding: 5px 10px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            cursor: pointer;
+            color: #eee;
+            background: #444;
+            transition: 0.15s;
+        }
+
+        #dupModal .dup-btns button:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        #dupModal .dup-btns button.replace:hover {
+            background: var(--gold);
+            color: #000;
+        }
+
+        #dupModal .apply-all-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 15px;
+            font-size: 0.85em;
+            color: var(--text-muted);
+        }
+
+        #dupModal .dup-counter {
+            font-size: 0.8em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        /* --- Metadata Edit Modal --- */
+        #metaEditModal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.92);
+            z-index: 1002;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #metaEditModal .meta-box {
+            background: #1e1e1e;
+            border: 1px solid #555;
+            border-radius: 10px;
+            padding: 20px;
+            max-width: 450px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        #metaEditModal h3 {
+            margin: 0 0 12px;
+            color: var(--accent);
+        }
+
+        #metaEditModal .meta-field {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            margin-bottom: 8px;
+        }
+
+        #metaEditModal .meta-field label {
+            font-size: 0.75em;
+            color: var(--text-muted);
+        }
+
+        #metaEditModal .meta-field input,
+        #metaEditModal .meta-field textarea {
+            font-size: 0.85em;
+            padding: 4px 6px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background: #2a2a2a;
+            color: #eee;
+        }
+
+        #metaEditModal .meta-btns {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        #metaEditModal .meta-btns button {
+            flex: 1;
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            cursor: pointer;
+            font-size: 0.85em;
+            color: #eee;
+            background: #444;
+        }
+
+        #metaEditModal .meta-btns button.save {
+            background: var(--green);
+            color: #000;
+        }
+
+        #metaEditModal .meta-btns button:hover {
+            opacity: 0.85;
+        }
     </style>
 </head>
 
@@ -428,6 +616,7 @@
                             <option value="type">Type</option>
                             <option value="rarity">Rarity</option>
                             <option value="custom">Custom</option>
+                            <option value="modified">Modified</option>
                         </select>
                         <select id="dir1-command">
                             <option value="asc">↑</option>
@@ -441,6 +630,7 @@
                             <option value="color">Color</option>
                             <option value="type">Type</option>
                             <option value="rarity">Rarity</option>
+                            <option value="modified">Modified</option>
                         </select>
                         <select id="dir2-command">
                             <option value="asc">↑</option>
@@ -465,6 +655,7 @@
                             <option value="type">Type</option>
                             <option value="rarity">Rarity</option>
                             <option value="custom">Custom</option>
+                            <option value="modified">Modified</option>
                         </select>
                         <select id="dir1-library">
                             <option value="asc">↑</option>
@@ -478,6 +669,7 @@
                             <option value="color">Color</option>
                             <option value="type">Type</option>
                             <option value="rarity">Rarity</option>
+                            <option value="modified">Modified</option>
                         </select>
                         <select id="dir2-library">
                             <option value="asc">↑</option>
@@ -502,6 +694,7 @@
                             <option value="type">Type</option>
                             <option value="rarity">Rarity</option>
                             <option value="custom">Custom</option>
+                            <option value="modified">Modified</option>
                         </select>
                         <select id="dir1-tokens">
                             <option value="asc">↑</option>
@@ -515,6 +708,7 @@
                             <option value="color">Color</option>
                             <option value="type">Type</option>
                             <option value="rarity">Rarity</option>
+                            <option value="modified">Modified</option>
                         </select>
                         <select id="dir2-tokens">
                             <option value="asc">↑</option>
@@ -548,6 +742,7 @@
             if (field === 'type') { av = am.type_line || 'zzz'; bv = bm.type_line || 'zzz'; return mul * av.localeCompare(bv); }
             if (field === 'rarity') { av = RARITY_ORDER[am.rarity] ?? 9; bv = RARITY_ORDER[bm.rarity] ?? 9; return mul * (av - bv); }
             if (field === 'custom') { av = a._customOrder ?? 9999; bv = b._customOrder ?? 9999; return mul * (av - bv); }
+            if (field === 'modified') { av = a._modified ?? 0; bv = b._modified ?? 0; return mul * (av - bv); }
             return 0;
         }
 
@@ -771,15 +966,169 @@
                 clearInterval(pollInterval);
                 if (status.error) alert("Error: " + status.error);
                 else {
-                    deck = status.result;
-                    document.getElementById('deckName').value = deck.deckName;
-                    render();
+                    const imported = status.result;
+                    if (imported.deckName && !document.getElementById('deckName').value) {
+                        document.getElementById('deckName').value = imported.deckName;
+                    }
+                    // Additive merge with duplicate detection
+                    mergeImportedCards(imported);
                     if (status.missing && status.missing.length > 0) {
                         alert("⚠️ Some cards could not be found automatically:\n\n" + status.missing.join("\n") + "\n\nPlease add these manually.");
                     }
                 }
                 showLoading(false);
             }
+        }
+
+        // === ADDITIVE MERGE WITH DUPLICATE DETECTION ===
+        function mergeImportedCards(imported) {
+            const now = Date.now();
+            const duplicates = []; // { zone, existingIdx, existing, incoming }
+
+            for (const zone of ['command', 'library', 'tokens']) {
+                const incoming = imported[zone] || [];
+                // Snapshot of EXISTING card names before this merge — so we only
+                // compare incoming vs pre-existing, not incoming vs other incoming
+                const existingNames = new Set(deck[zone].map(e => (e.name || '').toLowerCase()));
+
+                for (const card of incoming) {
+                    card._modified = card._modified || now;
+                    const nameLower = (card.name || '').toLowerCase();
+                    if (existingNames.has(nameLower)) {
+                        // Find the first existing card with this name
+                        const existingIdx = deck[zone].findIndex(e => (e.name || '').toLowerCase() === nameLower);
+                        duplicates.push({ zone, existingIdx, existing: deck[zone][existingIdx], incoming: card });
+                    } else {
+                        deck[zone].push(card);
+                    }
+                }
+            }
+
+            if (duplicates.length > 0) {
+                showDuplicateModal(duplicates);
+            } else {
+                cleanTokenZone();
+                syncDeck();
+                render();
+            }
+        }
+
+        // === POST-IMPORT TOKEN CLEANUP ===
+        const TOKEN_KEYWORDS = ['token', 'energy', 'poison', 'day', 'night', 'rad', 'emblem'];
+        function cleanTokenZone() {
+            deck.tokens = deck.tokens.filter(c => {
+                const name = (c.name || '').toLowerCase();
+                const typeLine = ((c.meta && c.meta.type_line) || '').toLowerCase();
+                const haystack = name + ' ' + typeLine;
+                return TOKEN_KEYWORDS.some(kw => haystack.includes(kw));
+            });
+        }
+
+        // === DUPLICATE RESOLUTION MODAL (zone-by-zone) ===
+        let dupQueue = [];   // grouped: [{zone, items: [{existingIdx, existing, incoming}]}]
+        let dupZoneIdx = 0;  // which zone group we're in
+        let dupItemIdx = 0;  // which item within the current zone
+
+        function showDuplicateModal(duplicates) {
+            // Group duplicates by zone in order: command, library, tokens
+            const grouped = {};
+            for (const d of duplicates) {
+                if (!grouped[d.zone]) grouped[d.zone] = [];
+                grouped[d.zone].push(d);
+            }
+            dupQueue = [];
+            for (const zone of ['command', 'library', 'tokens']) {
+                if (grouped[zone] && grouped[zone].length > 0) {
+                    dupQueue.push({ zone, items: grouped[zone] });
+                }
+            }
+            dupZoneIdx = 0;
+            dupItemIdx = 0;
+            document.getElementById('dupApplyAll').checked = false;
+            renderDupCurrent();
+            document.getElementById('dupModal').style.display = 'flex';
+        }
+
+        function renderDupCurrent() {
+            if (dupZoneIdx >= dupQueue.length) {
+                // All zones resolved
+                document.getElementById('dupModal').style.display = 'none';
+                cleanTokenZone();
+                syncDeck();
+                render();
+                return;
+            }
+            const group = dupQueue[dupZoneIdx];
+            const d = group.items[dupItemIdx];
+            const container = document.getElementById('dupPairContainer');
+            const zonePretty = { command: 'Command Zone', library: 'Library', tokens: 'Tokens' };
+            const totalInZone = group.items.length;
+            document.getElementById('dupCounter').textContent = `${zonePretty[group.zone] || group.zone} — Duplicate ${dupItemIdx + 1} of ${totalInZone}`;
+
+            container.innerHTML = `
+                <div class="dup-zone-label">${zonePretty[group.zone] || group.zone}</div>
+                <div class="dup-pair">
+                    <div style="text-align:center">
+                        <img src="${(d.existing.is_flipped && d.existing.back) ? d.existing.back : d.existing.front}" alt="Current">
+                        <div class="dup-label">Current</div>
+                    </div>
+                    <div style="text-align:center">
+                        <img src="${(d.incoming.is_flipped && d.incoming.back) ? d.incoming.back : d.incoming.front}" alt="Incoming">
+                        <div class="dup-label">Incoming</div>
+                    </div>
+                    <div class="dup-info">
+                        <div class="card-name">${d.incoming.name}</div>
+                        <div class="dup-btns">
+                            <button onclick="resolveDup('keep')">Keep Current</button>
+                            <button onclick="resolveDup('both')">Import Both</button>
+                            <button class="replace" onclick="resolveDup('replace')">Replace Art</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function resolveDup(action) {
+            const applyAll = document.getElementById('dupApplyAll').checked;
+            const now = Date.now();
+            const group = dupQueue[dupZoneIdx];
+
+            const applyAction = (d) => {
+                if (action === 'keep') {
+                    // Mark as modified so it sorts as "recently checked"
+                    deck[d.zone][d.existingIdx]._modified = now;
+                } else if (action === 'both') {
+                    d.incoming._modified = now;
+                    deck[d.zone].push(d.incoming);
+                } else if (action === 'replace') {
+                    deck[d.zone][d.existingIdx].front = d.incoming.front;
+                    deck[d.zone][d.existingIdx].back = d.incoming.back;
+                    deck[d.zone][d.existingIdx].meta = d.incoming.meta;
+                    deck[d.zone][d.existingIdx]._modified = now;
+                }
+            };
+
+            if (applyAll) {
+                // Apply to all remaining items IN THIS ZONE only
+                for (let i = dupItemIdx; i < group.items.length; i++) {
+                    applyAction(group.items[i]);
+                }
+                // Move to next zone, reset checkbox
+                dupZoneIdx++;
+                dupItemIdx = 0;
+                document.getElementById('dupApplyAll').checked = false;
+            } else {
+                applyAction(group.items[dupItemIdx]);
+                dupItemIdx++;
+                if (dupItemIdx >= group.items.length) {
+                    // Zone complete, move to next
+                    dupZoneIdx++;
+                    dupItemIdx = 0;
+                    document.getElementById('dupApplyAll').checked = false;
+                }
+            }
+
+            renderDupCurrent();
         }
 
         // === JSON LOAD ===
@@ -793,26 +1142,28 @@
                     const loadedDeck = JSON.parse(e.target.result);
                     if (!loadedDeck.library && !loadedDeck.command) throw new Error("Invalid Deck JSON format");
 
+                    const now = Date.now();
                     const mapCard = (c) => ({
                         id: c.id,
                         name: c.name,
                         front: c.front || c.image,
                         back: c.back || c.backImage,
                         is_flipped: false,
-                        meta: c.meta || null
+                        meta: c.meta || null,
+                        _modified: c._modified || now
                     });
 
-                    deck = {
+                    const imported = {
                         deckName: loadedDeck.deckName || "Loaded Deck",
                         command: (loadedDeck.command || []).map(mapCard),
                         library: (loadedDeck.library || []).map(mapCard),
                         tokens: (loadedDeck.tokens || []).map(mapCard)
                     };
 
-                    document.getElementById('deckName').value = deck.deckName;
-                    await fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
-                    render();
-                    alert("Deck Loaded Successfully!");
+                    if (imported.deckName && !document.getElementById('deckName').value) {
+                        document.getElementById('deckName').value = imported.deckName;
+                    }
+                    mergeImportedCards(imported);
                 } catch (err) {
                     alert("Failed to load JSON: " + err.message);
                 }
@@ -868,6 +1219,9 @@
             const res = await fetch('/api/builder/add-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
             deck = data.deck;
+            // Stamp _modified on manually added card
+            const addedZone = deck[zone] || [];
+            if (addedZone.length > 0) addedZone[addedZone.length - 1]._modified = Date.now();
             render();
 
             ['manFront', 'manBack', 'manName', 'manOracle', 'manManaCost', 'manManaValue', 'manTypeLine', 'manPower', 'manToughness', 'manColors', 'manColorId', 'manKeywords'].forEach(id => document.getElementById(id).value = '');
@@ -928,13 +1282,34 @@
             document.getElementById('cnt-tokens').innerText = deck.tokens.length;
         }
 
+        // Find the nearest insertion index in a grid based on cursor position
+        function findNearestInsertIndex(gridEl, cursorX, cursorY) {
+            const children = gridEl.querySelectorAll('.visual-card:not(.dragging)');
+            let bestIdx = 0;
+            let bestDist = Infinity;
+            for (let ci = 0; ci < children.length; ci++) {
+                const rect = children[ci].getBoundingClientRect();
+                const midX = rect.left + rect.width / 2;
+                const midY = rect.top + rect.height / 2;
+                const dist = Math.hypot(cursorX - midX, cursorY - midY);
+                // Insert before or after this child based on horizontal position
+                const afterThis = (cursorX > midX);
+                const insertIdx = afterThis ? ci + 1 : ci;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIdx = insertIdx;
+                }
+            }
+            return bestIdx;
+        }
+
         function renderZone(elId, cards, zoneName) {
             const oldEl = document.getElementById(elId);
             // Clone to strip ALL prior event listeners (prevents handler accumulation)
             const el = oldEl.cloneNode(false);
             oldEl.parentNode.replaceChild(el, oldEl);
 
-            // Zone-level drop target for empty zones and dropping at end
+            // Zone-level drop target — handles drops on gaps between cards and empty zones
             el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over-zone'); });
             el.addEventListener('dragleave', () => el.classList.remove('drag-over-zone'));
             el.addEventListener('drop', (e) => {
@@ -943,8 +1318,15 @@
                 const srcZone = e.dataTransfer.getData('zone');
                 const srcIdx = parseInt(e.dataTransfer.getData('idx'));
                 if (isNaN(srcIdx)) return;
+                // Find nearest insertion position based on cursor
+                let insertIdx = findNearestInsertIndex(el, e.clientX, e.clientY);
+                // Adjust index to account for the source card being removed
+                // (the DOM children we measured don't include the dragging card visually,
+                //  but the data array still has it at srcIdx)
+                if (srcZone === zoneName && srcIdx < insertIdx) insertIdx--;
                 const card = deck[srcZone].splice(srcIdx, 1)[0];
-                deck[zoneName].push(card);
+                insertIdx = Math.max(0, Math.min(insertIdx, deck[zoneName].length));
+                deck[zoneName].splice(insertIdx, 0, card);
                 updateCustomOrder(zoneName);
                 if (srcZone !== zoneName) updateCustomOrder(srcZone);
                 syncDeck();
@@ -970,7 +1352,7 @@
                 });
                 div.addEventListener('dragend', () => div.classList.remove('dragging'));
 
-                // Drop on card (insert before)
+                // Drop on card — insert before or after based on horizontal position
                 div.addEventListener('dragover', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -986,14 +1368,14 @@
                     if (isNaN(srcIdx)) return;
                     // No-op: dropping card on itself
                     if (srcZone === zoneName && srcIdx === i) return;
-                    // Determine if dropping on top or bottom half of target card
+                    // Determine if dropping on right half (insert after) or left half (insert before)
                     const rect = div.getBoundingClientRect();
-                    const dropOnBottom = (e.clientY - rect.top) > rect.height / 2;
+                    const dropAfter = (e.clientX - rect.left) > rect.width / 2;
                     // Remove card from source first
                     const card = deck[srcZone].splice(srcIdx, 1)[0];
                     // Calculate target index in the (now modified) array
                     let targetIdx = (srcZone === zoneName && srcIdx < i) ? i - 1 : i;
-                    if (dropOnBottom) targetIdx++;
+                    if (dropAfter) targetIdx++;
                     targetIdx = Math.max(0, Math.min(targetIdx, deck[zoneName].length));
                     deck[zoneName].splice(targetIdx, 0, card);
                     updateCustomOrder(zoneName);
@@ -1036,6 +1418,7 @@
             if (c.back) addCtxBtn(menu, '🔄 Flip View', () => flipCard(ctxZone, ctxIdx));
             addCtxBtn(menu, '📷 Change Image', () => changeImage(ctxZone, ctxIdx));
             addCtxBtn(menu, '🔎 View Meta', () => viewMeta(ctxZone, ctxIdx));
+            addCtxBtn(menu, '✏️ Edit Meta', () => editMeta(ctxZone, ctxIdx));
             addCtxBtn(menu, '❌ Remove', () => del(ctxZone, ctxIdx), true);
             menu.style.left = Math.min(x, window.innerWidth - 160) + 'px';
             menu.style.top = Math.min(y, window.innerHeight - 150) + 'px';
@@ -1076,6 +1459,7 @@
                 });
                 const data = await res.json();
                 deck[zone][idx].front = data.image || b64;
+                deck[zone][idx]._modified = Date.now();
                 fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
                 render();
             };
@@ -1104,6 +1488,68 @@
                 m.back_oracle_text ? `\n--- Back Face ---\n${m.back_type_line || ''}\n${m.back_oracle_text}` : null
             ].filter(Boolean);
             alert(lines.join('\n'));
+        }
+
+        // === EDIT META ===
+        let editMetaZone = '', editMetaIdx = 0;
+        function editMeta(zone, idx) {
+            editMetaZone = zone;
+            editMetaIdx = idx;
+            const c = deck[zone][idx];
+            const m = c.meta || {};
+            document.getElementById('metaEditName').value = c.name || '';
+            document.getElementById('metaEditType').value = m.type_line || '';
+            document.getElementById('metaEditManaCost').value = m.mana_cost || '';
+            document.getElementById('metaEditCmc').value = m.cmc ?? '';
+            document.getElementById('metaEditColors').value = (m.colors || []).join(', ');
+            document.getElementById('metaEditColorId').value = (m.color_identity || []).join(', ');
+            document.getElementById('metaEditKeywords').value = (m.keywords || []).join(', ');
+            document.getElementById('metaEditPower').value = m.power || '';
+            document.getElementById('metaEditToughness').value = m.toughness || '';
+            document.getElementById('metaEditRarity').value = m.rarity || '';
+            document.getElementById('metaEditSet').value = m.set_name || '';
+            document.getElementById('metaEditOracle').value = m.oracle_text || '';
+            document.getElementById('metaEditModal').style.display = 'flex';
+        }
+
+        function saveMetaEdit() {
+            const c = deck[editMetaZone][editMetaIdx];
+            if (!c.meta) c.meta = {};
+            const m = c.meta;
+            c.name = document.getElementById('metaEditName').value || c.name;
+            m.type_line = document.getElementById('metaEditType').value || null;
+            const rawCost = document.getElementById('metaEditManaCost').value;
+            if (rawCost) {
+                const normalized = normalizeManaCost(rawCost);
+                if (normalized.error) {
+                    alert('\u26a0\ufe0f Invalid Mana Cost: ' + normalized.error);
+                    return;
+                }
+                m.mana_cost = normalized.result;
+            } else {
+                m.mana_cost = null;
+            }
+            const cmcVal = document.getElementById('metaEditCmc').value;
+            m.cmc = cmcVal !== '' ? parseFloat(cmcVal) : parseManaValue(m.mana_cost);
+            const colStr = document.getElementById('metaEditColors').value;
+            m.colors = colStr ? sortColors(colStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)) : parseColors(m.mana_cost);
+            const cidStr = document.getElementById('metaEditColorId').value;
+            m.color_identity = cidStr ? sortColors(cidStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)) : [...m.colors];
+            const kwStr = document.getElementById('metaEditKeywords').value;
+            m.keywords = kwStr ? kwStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+            m.power = document.getElementById('metaEditPower').value || null;
+            m.toughness = document.getElementById('metaEditToughness').value || null;
+            m.rarity = document.getElementById('metaEditRarity').value || null;
+            m.set_name = document.getElementById('metaEditSet').value || null;
+            m.oracle_text = document.getElementById('metaEditOracle').value || null;
+            c._modified = Date.now();
+            document.getElementById('metaEditModal').style.display = 'none';
+            syncDeck();
+            render();
+        }
+
+        function cancelMetaEdit() {
+            document.getElementById('metaEditModal').style.display = 'none';
         }
 
         function flipCard(zone, idx) {
@@ -1156,7 +1602,7 @@
         }
 
         function cleanCard(c) {
-            return { id: c.id, name: c.name, image: c.front, backImage: c.back, meta: c.meta || null };
+            return { id: c.id, name: c.name, image: c.front, backImage: c.back, meta: c.meta || null, _modified: c._modified || null };
         }
 
         function showLoading(show) { document.getElementById('loadingScreen').style.display = show ? 'flex' : 'none'; }
@@ -1169,6 +1615,50 @@
 
     <!-- Context Menu -->
     <div id="cardContextMenu"></div>
+
+    <!-- Duplicate Resolution Modal -->
+    <div id="dupModal">
+        <div class="dup-box">
+            <h3>⚠️ Duplicate Cards Found</h3>
+            <div class="dup-counter" id="dupCounter"></div>
+            <div class="apply-all-row">
+                <input type="checkbox" id="dupApplyAll">
+                <label for="dupApplyAll">Apply this choice to all remaining duplicates in this zone</label>
+            </div>
+            <div id="dupPairContainer"></div>
+        </div>
+    </div>
+
+    <!-- Metadata Edit Modal -->
+    <div id="metaEditModal">
+        <div class="meta-box">
+            <h3>✏️ Edit Card Metadata</h3>
+            <div class="meta-field"><label>Card Name</label><input type="text" id="metaEditName"></div>
+            <div class="meta-field"><label>Type Line</label><input type="text" id="metaEditType"
+                    placeholder="e.g. Creature — Human Wizard"></div>
+            <div class="meta-field"><label>Mana Cost</label><input type="text" id="metaEditManaCost"
+                    placeholder="e.g. {2}{U}{U}"></div>
+            <div class="meta-field"><label>Mana Value (auto from cost if blank)</label><input type="text"
+                    id="metaEditCmc"></div>
+            <div class="meta-field"><label>Colors (e.g. W,U,B)</label><input type="text" id="metaEditColors"></div>
+            <div class="meta-field"><label>Color Identity</label><input type="text" id="metaEditColorId"></div>
+            <div class="meta-field"><label>Keywords (comma-separated)</label><input type="text" id="metaEditKeywords">
+            </div>
+            <div style="display:flex; gap:8px">
+                <div class="meta-field" style="flex:1"><label>Power</label><input type="text" id="metaEditPower"></div>
+                <div class="meta-field" style="flex:1"><label>Toughness</label><input type="text"
+                        id="metaEditToughness"></div>
+            </div>
+            <div class="meta-field"><label>Rarity</label><input type="text" id="metaEditRarity"></div>
+            <div class="meta-field"><label>Set Name</label><input type="text" id="metaEditSet"></div>
+            <div class="meta-field"><label>Oracle Text</label><textarea id="metaEditOracle" rows="3"
+                    style="resize:vertical;"></textarea></div>
+            <div class="meta-btns">
+                <button onclick="cancelMetaEdit()">Cancel</button>
+                <button class="save" onclick="saveMetaEdit()">💾 Save</button>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

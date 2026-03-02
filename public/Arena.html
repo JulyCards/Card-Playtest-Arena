@@ -315,7 +315,7 @@
             transform: translate(-50%, -50%);
         }
 
-        /* Counters, Life, Modals (Unchanged) */
+        /* Counters, Life, Modals */
         .counter-strip {
             position: absolute;
             right: 0;
@@ -605,6 +605,71 @@
             font-size: 0.75em;
             color: #888;
         }
+
+        /* --- Game Log Panel --- */
+        #logPanel {
+            position: fixed;
+            bottom: 60px;
+            right: 10px;
+            width: 340px;
+            max-height: 300px;
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid #444;
+            border-radius: 8px;
+            display: none;
+            flex-direction: column;
+            z-index: 500;
+            font-size: 0.75em;
+        }
+
+        #logPanel.visible {
+            display: flex;
+        }
+
+        #logPanel .log-header {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 10px;
+            border-bottom: 1px solid #333;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        #logPanel .log-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 10px;
+        }
+
+        #logPanel .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #222;
+            color: #ccc;
+            line-height: 1.4;
+        }
+
+        #logPanel .log-entry .log-time {
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        #logToggleBtn {
+            position: fixed;
+            bottom: 65px;
+            right: 15px;
+            z-index: 501;
+            background: #333;
+            color: #aaa;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 0.75em;
+        }
+
+        #logToggleBtn:hover {
+            background: #555;
+        }
     </style>
 </head>
 
@@ -634,7 +699,8 @@
             <button class="danger" onclick="socket.emit('resetGame')">Reset Game</button>
         </div>
         <div style="flex:1; text-align:right; font-size:0.8em; color:#666;">
-            <b>1/2/3</b>: Lib Actions | <b>Tab</b>: Untap All | <b>A/D</b>: Rotate | <b>Shift+Click</b>: Zoom
+            <b>1/2/3</b>: Lib Actions | <b>Tab</b>: Untap All | <b>A/D</b>: Rotate | <b>C</b>: Draw | <b>+/-</b>:
+            Counters | <b>Shift+Click</b>: Zoom
         </div>
     </div>
 
@@ -711,6 +777,16 @@
         <img id="previewImg" style="max-height:90vh; max-width:90vw; border:2px solid white; border-radius:10px;">
     </div>
 
+    <!-- Game Log -->
+    <button id="logToggleBtn" onclick="toggleLogPanel()">📜 Log</button>
+    <div id="logPanel">
+        <div class="log-header">
+            <span>Game Log</span>
+            <button onclick="toggleLogPanel()" style="background:none;border:none;color:#888;cursor:pointer;">✕</button>
+        </div>
+        <div class="log-body" id="logBody"></div>
+    </div>
+
     <script>
         const socket = io();
         let gameState = { players: [] };
@@ -771,6 +847,121 @@
             Object.assign(localImageCache, data);
             renderGame();
         });
+
+        // --- GAME LOG ---
+        socket.on('gameLogFull', (entries) => {
+            entries.forEach(e => appendLogEntry(e));
+        });
+        socket.on('gameLog', (entry) => {
+            appendLogEntry(entry);
+        });
+
+        function toggleLogPanel() {
+            document.getElementById('logPanel').classList.toggle('visible');
+        }
+
+        let logEntries = [];
+
+        function appendLogEntry(entry) {
+            logEntries.push(entry);
+            renderLogEntry(entry);
+        }
+
+        // Color map for log entry types
+        const LOG_COLORS = {
+            draw: '#4a7ab5',        // Dark blue
+            toLibrary: '#7ac5f0',   // Light blue
+            tap: '#5cb85c',         // Green
+            untapAll: '#5cb85c',    // Green
+            exile: '#ddd',          // White
+            graveyard: '#666',      // Dark grey
+            command: '#e87ab5',     // Pink
+            counter: '#d4a940',     // Yellow
+            inspect: '#c44',        // Red
+            join: '#5cb85c',        // Green
+            leave: '#c44',          // Red
+            default: '#aaa'         // Light grey
+        };
+
+        function getLogColor(entry) {
+            if (entry.type === 'move') {
+                if (entry.toZone === 'hand' && entry.fromZone === 'library') return LOG_COLORS.draw;
+                if (entry.toZone === 'library') return LOG_COLORS.toLibrary;
+                if (entry.fromZone === 'command' || entry.toZone === 'command') return LOG_COLORS.command;
+                if (entry.toZone === 'exile') return LOG_COLORS.exile;
+                if (entry.toZone === 'graveyard') return LOG_COLORS.graveyard;
+                return LOG_COLORS.default;
+            }
+            if (entry.type === 'tap') return LOG_COLORS.tap;
+            if (entry.type === 'untapAll') return LOG_COLORS.tap;
+            if (entry.type === 'counterAdd' || entry.type === 'counterRemove' || entry.type === 'counterChange') return LOG_COLORS.counter;
+            if (entry.type === 'reorder') return LOG_COLORS.inspect;
+            if (entry.type === 'inspect') return LOG_COLORS.inspect;
+            if (entry.type === 'playerJoin') return LOG_COLORS.join;
+            if (entry.type === 'playerLeave') return LOG_COLORS.leave;
+            return LOG_COLORS.default;
+        }
+
+        const HIDDEN_ZONES = ['hand', 'library'];
+
+        function renderLogEntry(entry) {
+            const body = document.getElementById('logBody');
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            const t = new Date(entry.time);
+            const timeStr = `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}:${t.getSeconds().toString().padStart(2, '0')}`;
+            const color = getLogColor(entry);
+
+            let text = '';
+            if (entry.type === 'move') {
+                const fromName = entry.fromPlayerName || entry.fromPid;
+                const toName = entry.toPlayerName || entry.toPid;
+                const fromHidden = HIDDEN_ZONES.includes(entry.fromZone);
+                const toHidden = HIDDEN_ZONES.includes(entry.toZone);
+
+                if (entry.fromZone === 'library' && entry.toZone === 'hand') {
+                    // Library -> Hand = draw
+                    text = `(${toName}) Drew a card`;
+                } else if (entry.fromZone === 'hand' && entry.toZone === 'library') {
+                    // Hand -> Library
+                    const methodLabel = { top: 'top', bottom: 'bottom', shuffle: 'shuffle in' };
+                    text = `(${fromName}) put a card from their hand ${methodLabel[entry.method] || 'top'}`;
+                } else if (fromHidden && toHidden) {
+                    // Both hidden
+                    text = `(${fromName}) moved a card (${entry.fromZone} → ${entry.toZone})`;
+                } else {
+                    // At least one non-hidden: show card name
+                    text = `${entry.cardName} - ${entry.fromZone} (${fromName}) → ${entry.dest || entry.toZone} (${toName})`;
+                }
+            } else if (entry.type === 'shuffle') {
+                text = `${entry.playerName} shuffled their library`;
+            } else if (entry.type === 'untapAll') {
+                text = `${entry.playerName} untapped all`;
+            } else if (entry.type === 'inspect') {
+                text = `${entry.playerName} is viewing ${entry.zone} (${entry.targetPlayerName || entry.targetPid})`;
+            } else if (entry.type === 'reorder') {
+                text = `${entry.playerName} rearranged a card in their library`;
+            } else if (entry.type === 'playerJoin') {
+                text = `🟢 ${entry.playerName} joined the game`;
+            } else if (entry.type === 'playerLeave') {
+                text = `🔴 ${entry.playerName} left the game`;
+            } else if (entry.type === 'counterAdd') {
+                text = `${entry.playerName} added ${entry.counter} to ${entry.cardName}`;
+            } else if (entry.type === 'counterRemove') {
+                text = `${entry.playerName} removed a counter from ${entry.cardName}`;
+            } else if (entry.type === 'counterChange') {
+                text = `${entry.playerName} changed counter on ${entry.cardName}: ${entry.counter}`;
+            } else if (entry.type === 'tap') {
+                text = `${entry.playerName} tapped ${entry.cardName}`;
+            } else {
+                text = JSON.stringify(entry);
+            }
+
+            div.style.color = color;
+            div.innerHTML = `<span class="log-time">[${timeStr}]</span> ${text}`;
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+        }
 
         function checkViewports() {
             if (gameState.players.length > 0) {
@@ -851,6 +1042,7 @@
 
             header.innerHTML = `
             <strong>${p.name}</strong>
+            <span style="color:#888; font-size:0.8em; margin-left:5px;">🂠 ${p.hand.length}</span>
             <div class="life-counter">
                 <button class="life-btn" onclick="emitLife('${p.id}', -1)">-</button>
                 <input type="number" class="life-input" id="life-${p.id}" value="${lifeDisplay}" defaultValue="${p.life}" 
@@ -886,6 +1078,8 @@
 
             wrapper.className = 'zone-box';
             wrapper.style.cssText = style;
+            wrapper.dataset.zone = zone;
+            wrapper.dataset.pid = pid;
             wrapper.setAttribute('ondragover', `allowDrop(event, '${pid}', '${zone}')`);
             wrapper.setAttribute('ondrop', `handleDrop(event, '${pid}', '${zone}', this)`);
 
@@ -1136,6 +1330,7 @@
             document.getElementById('gridTitle').innerText = `${zone.toUpperCase()} - ${pid}`;
             document.getElementById('tokenHint').style.display = zone === 'tokens' ? 'inline' : 'none';
             document.getElementById('gridModal').style.display = 'flex';
+            socket.emit('openInspect', { pid, zone });
             renderGrid();
         }
         function closeGridModal() { document.getElementById('gridModal').style.display = 'none'; activeModal = null; }
@@ -1229,7 +1424,30 @@
 
         // --- KEYBINDINGS & HELPERS ---
         let hoverId = null;
-        document.addEventListener('mouseover', e => { if (e.target.classList.contains('card')) hoverId = e.target.id; else hoverId = null; });
+        let hoverPill = null; // Track hovered counter pill data
+        let hoverZone = null; // Track hovered zone-box { pid, zone }
+        document.addEventListener('mouseover', e => {
+            if (e.target.classList.contains('card')) hoverId = e.target.id;
+            else if (!e.target.closest('.card')) hoverId = null;
+            // Counter pill hover tracking
+            const pill = e.target.closest('.counter-pill');
+            if (pill) {
+                const minusBtn = pill.querySelector('.pill-btn');
+                const plusBtn = pill.querySelector('.pill-btn:last-child');
+                if (minusBtn && plusBtn) {
+                    hoverPill = { minus: minusBtn, plus: plusBtn };
+                }
+            } else {
+                hoverPill = null;
+            }
+            // Zone-box hover tracking
+            const zoneBox = e.target.closest('.zone-box');
+            if (zoneBox && zoneBox.dataset.zone && zoneBox.dataset.pid) {
+                hoverZone = { zone: zoneBox.dataset.zone, pid: zoneBox.dataset.pid };
+            } else {
+                hoverZone = null;
+            }
+        });
 
         document.addEventListener('keydown', e => {
             // --- 1. HANDLE MODAL SHORTCUTS (1, 2, 3) ---
@@ -1250,7 +1468,31 @@
                 return;
             }
 
-            if (!hoverId || document.activeElement.tagName === 'INPUT') return;
+            if (!hoverId || document.activeElement.tagName === 'INPUT') {
+                // --- Zone-box shortcuts (Q/E/C on library/graveyard/exile/command zone boxes) ---
+                if (hoverZone && !document.activeElement.tagName.match(/INPUT/) && !hoverId) {
+                    const k = e.key.toLowerCase();
+                    const { pid, zone } = hoverZone;
+                    const p = gameState.players.find(x => x.id === pid);
+                    if (p && p[zone] && p[zone].length > 0) {
+                        const topCard = p[zone][0];
+                        if (k === 'q') { emitMove(pid, zone, topCard.owner, 'graveyard', topCard.uid); return; }
+                        if (k === 'e') { emitMove(pid, zone, topCard.owner, 'exile', topCard.uid); return; }
+                        if (k === 'c') { emitMove(pid, zone, myPid, 'hand', topCard.uid); return; }
+                    }
+                }
+                return;
+            }
+
+            // --- Counter shortcuts (+/-) ---
+            if (hoverPill && (e.key === '+' || e.key === '=')) {
+                hoverPill.plus.click();
+                return;
+            }
+            if (hoverPill && e.key === '-') {
+                hoverPill.minus.click();
+                return;
+            }
 
             // Find the card being hovered
             let targetC = null, targetP = null, targetZ = null;
@@ -1286,10 +1528,11 @@
                 socket.emit('cardUpdate', { pid: targetP, zone: targetZ, uid: targetC.uid, updates: { transformed: !targetC.transformed } });
             }
 
-            // --- 6. ZONE SHORTCUTS (W/Q/E/H) — Work from ANY zone ---
+            // --- 6. ZONE SHORTCUTS (W/Q/E/H/C) — Work from ANY zone ---
             if (k === 'q') emitMove(targetP, targetZ, targetC.owner, 'graveyard', targetC.uid);
             if (k === 'e') emitMove(targetP, targetZ, targetC.owner, 'exile', targetC.uid);
             if (k === 'h') emitMove(targetP, targetZ, targetC.owner, 'hand', targetC.uid);
+            if (k === 'c') emitMove(targetP, targetZ, myPid, 'hand', targetC.uid);
             if (k === 'w' && targetZ !== 'battlefield') {
                 emitMove(targetP, targetZ, myPid, 'battlefield', targetC.uid, 0.4 + Math.random() * 0.2, 0.4 + Math.random() * 0.2);
             }
