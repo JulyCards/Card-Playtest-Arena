@@ -505,6 +505,106 @@
             margin-bottom: 5px;
             border-radius: 4px;
         }
+
+        /* --- TUNNEL UI --- */
+        .tunnel-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tunnel-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #555;
+            display: inline-block;
+        }
+
+        .tunnel-dot.active {
+            background: #4caf50;
+            box-shadow: 0 0 6px rgba(76, 175, 80, 0.6);
+        }
+
+        .tunnel-dot.starting {
+            background: #ff9800;
+            animation: pulse-dot 1s infinite;
+        }
+
+        @keyframes pulse-dot {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .tunnel-toggle {
+            padding: 3px 10px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .tunnel-toggle.start {
+            background: #2a6;
+            color: #fff;
+            border-color: #2a6;
+        }
+
+        .tunnel-toggle.stop {
+            background: #c44;
+            color: #fff;
+            border-color: #c44;
+        }
+
+        .tunnel-toggle:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .tunnel-url-inline {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #4a90e2;
+        }
+
+        .tunnel-url-inline.visible {
+            display: flex;
+        }
+
+        .tunnel-url-inline a {
+            color: #61afef;
+            font-size: 0.75em;
+            font-family: 'Consolas', monospace;
+            word-break: break-all;
+        }
+
+        .tunnel-copy-btn {
+            padding: 2px 6px;
+            font-size: 0.7em;
+            background: #4a90e2;
+            color: #000;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .tunnel-status-msg {
+            font-size: 0.75em;
+            color: #888;
+        }
     </style>
 </head>
 
@@ -520,6 +620,15 @@
             <a href="/" style="color:#61afef; font-weight:bold; text-decoration:none; margin-right:10px;">← Hub</a>
             <label>Size</label>
             <input type="range" min="80" max="250" value="120" oninput="resizeCards(this.value)">
+        </div>
+        <div class="tunnel-controls">
+            <span class="tunnel-dot" id="tunnelDot"></span>
+            <button class="tunnel-toggle start" id="tunnelBtn" onclick="toggleTunnel()">🌐 Share Online</button>
+            <div class="tunnel-url-inline" id="tunnelUrlBox">
+                <a id="tunnelUrl" href="#" target="_blank"></a>
+                <button class="tunnel-copy-btn" onclick="copyTunnelUrl()">📋</button>
+            </div>
+            <span class="tunnel-status-msg" id="tunnelStatus"></span>
         </div>
         <div>
             <button class="danger" onclick="socket.emit('resetGame')">Reset Game</button>
@@ -1190,6 +1299,81 @@
             document.documentElement.style.setProperty('--card-w', val + 'px');
             document.documentElement.style.setProperty('--card-h', (val * 1.4) + 'px');
         }
+
+        // === TUNNEL ===
+        let tunnelPoll = null;
+
+        async function fetchTunnelStatus() {
+            try { return await (await fetch('/api/tunnel/status')).json(); } catch { return null; }
+        }
+
+        function updateTunnelUI(s) {
+            if (!s) return;
+            const dot = document.getElementById('tunnelDot');
+            const btn = document.getElementById('tunnelBtn');
+            const urlBox = document.getElementById('tunnelUrlBox');
+            const urlEl = document.getElementById('tunnelUrl');
+            const msg = document.getElementById('tunnelStatus');
+            dot.className = 'tunnel-dot';
+            msg.textContent = '';
+
+            if (s.active && s.url) {
+                dot.classList.add('active');
+                btn.textContent = '⏹ Stop';
+                btn.className = 'tunnel-toggle stop';
+                btn.disabled = false;
+                urlBox.classList.add('visible');
+                urlEl.href = s.url + '/Arena.html';
+                urlEl.textContent = s.url;
+                msg.textContent = 'Share this link!';
+                msg.style.color = '#4caf50';
+                stopTunnelPoll();
+            } else if (s.error) {
+                btn.textContent = '🌐 Share Online';
+                btn.className = 'tunnel-toggle start';
+                btn.disabled = false;
+                urlBox.classList.remove('visible');
+                msg.textContent = s.error;
+                msg.style.color = '#e06c75';
+                stopTunnelPoll();
+            } else {
+                btn.textContent = '🌐 Share Online';
+                btn.className = 'tunnel-toggle start';
+                btn.disabled = false;
+                urlBox.classList.remove('visible');
+            }
+        }
+
+        async function toggleTunnel() {
+            const s = await fetchTunnelStatus();
+            if (s && s.active) {
+                await fetch('/api/tunnel/stop', { method: 'POST' });
+                stopTunnelPoll();
+                updateTunnelUI(await fetchTunnelStatus());
+            } else {
+                await fetch('/api/tunnel/start', { method: 'POST' });
+                startTunnelPoll();
+            }
+        }
+
+        function startTunnelPoll() {
+            stopTunnelPoll();
+            tunnelPoll = setInterval(async () => updateTunnelUI(await fetchTunnelStatus()), 2000);
+        }
+
+        function stopTunnelPoll() {
+            if (tunnelPoll) { clearInterval(tunnelPoll); tunnelPoll = null; }
+        }
+
+        function copyTunnelUrl() {
+            const url = document.getElementById('tunnelUrl').textContent;
+            navigator.clipboard.writeText(url + '/Arena.html');
+            const b = document.querySelector('.tunnel-copy-btn');
+            b.textContent = '✓';
+            setTimeout(() => b.textContent = '📋', 2000);
+        }
+
+        fetchTunnelStatus().then(updateTunnelUI);
     </script>
 </body>
 

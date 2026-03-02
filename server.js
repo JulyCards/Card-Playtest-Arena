@@ -9,6 +9,7 @@ const io = require('socket.io')(http, {
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const { spawn } = require('child_process');
 
 // === DECK BUILDER DEPENDENCIES ===
 const sharp = require('sharp');
@@ -718,6 +719,54 @@ function doMoveCard(fromPid, fromZone, toPid, toZone, uid, x = 0.5, y = 0.5, met
         }
     }
 }
+
+// ============================================================================
+//  PART 3: CLOUDFLARE TUNNEL
+// ============================================================================
+
+let tunnelState = { active: false, url: null, error: null };
+let tunnelProcess = null;
+
+function startTunnel() {
+    if (tunnelProcess) return;
+
+    tunnelState = { active: false, url: null, error: null };
+    tunnelProcess = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${PORT}`], {
+        stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let output = '';
+    tunnelProcess.stderr.on('data', (chunk) => {
+        output += chunk.toString();
+        const m = output.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+        if (m && !tunnelState.active) {
+            tunnelState = { active: true, url: m[0], error: null };
+            console.log(`[Tunnel] ${tunnelState.url}`);
+        }
+    });
+
+    tunnelProcess.on('error', () => {
+        tunnelState = { active: false, url: null, error: 'cloudflared not found. Is it installed?' };
+        tunnelProcess = null;
+    });
+
+    tunnelProcess.on('close', () => {
+        tunnelState = { active: false, url: null, error: null };
+        tunnelProcess = null;
+    });
+}
+
+function stopTunnel() {
+    if (tunnelProcess) { tunnelProcess.kill(); tunnelProcess = null; }
+    tunnelState = { active: false, url: null, error: null };
+}
+
+app.get('/api/tunnel/status', (_req, res) => res.json(tunnelState));
+app.post('/api/tunnel/start', (_req, res) => { startTunnel(); res.json({ ok: true }); });
+app.post('/api/tunnel/stop', (_req, res) => { stopTunnel(); res.json({ ok: true }); });
+
+process.on('exit', stopTunnel);
+process.on('SIGINT', () => { stopTunnel(); process.exit(); });
 
 // ============================================================================
 //  START SERVER
