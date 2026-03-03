@@ -627,6 +627,19 @@ let gameState = { players: [], active: false, isDayTime: true };
 let socketOwner = {};
 let globalImageCache = {};
 let gameLog = []; // Dev log: full card movement history
+let cardOrdering = 'smart'; // 'top' = last touched on top, 'bottom' = last touched underneath, 'smart' = attachables under, others on top
+
+function isAttachableCard(card) {
+    const m = card.meta;
+    if (!m) return card.isToken && card.name && card.name.toLowerCase().includes('copy') && !card.name.includes('(Copy)');
+    const typeLine = (m.type_line || '').toLowerCase();
+    const keywords = (m.keywords || []).map(k => k.toLowerCase());
+    if (keywords.includes('reconfigure')) return true;
+    if (typeLine.includes('equipment')) return true;
+    if (typeLine.includes('aura')) return true;
+    if (card.isToken && card.name && card.name.toLowerCase().includes('copy') && !card.name.includes('(Copy)')) return true;
+    return false;
+}
 
 // --- Debounced Counter Logging (unified) ---
 // All use 1.8s idle timers. Each map is keyed by a unique key for the counter.
@@ -705,8 +718,10 @@ function debouncedCardCounterLog(pid, uid, cardName) {
     let card = null;
     for (const z of allZones) { card = (p[z] || []).find(c => c.uid === uid); if (card) break; }
     if (!card) return;
+    const qtyFilter = c => /^.+:-?\d+$/.test(c);
     if (!cardCounterTimers[key]) {
-        cardCounterTimers[key] = { initial: JSON.stringify(card.counters || []), timer: null, cardName };
+        const initialQty = (card.counters || []).filter(qtyFilter);
+        cardCounterTimers[key] = { initial: JSON.stringify(initialQty), timer: null, cardName };
     }
     if (cardCounterTimers[key].timer) clearTimeout(cardCounterTimers[key].timer);
     cardCounterTimers[key].timer = setTimeout(() => {
@@ -714,10 +729,10 @@ function debouncedCardCounterLog(pid, uid, cardName) {
         let cardNow = null;
         if (pNow) { for (const z of allZones) { cardNow = (pNow[z] || []).find(c => c.uid === uid); if (cardNow) break; } }
         const initialStr = cardCounterTimers[key].initial;
-        const currentStr = JSON.stringify(cardNow ? (cardNow.counters || []) : []);
-        if (initialStr !== currentStr) {
-            const countersNow = cardNow ? (cardNow.counters || []) : [];
-            const summary = countersNow.length > 0 ? countersNow.join(', ') : 'none';
+        const currentQty = (cardNow ? (cardNow.counters || []) : []).filter(qtyFilter);
+        const currentStr = JSON.stringify(currentQty);
+        if (initialStr !== currentStr && currentQty.length > 0) {
+            const summary = currentQty.join(', ');
             addLogEntry({ type: 'counterChange', pid, playerName: getPlayerName(pid), cardName: cardCounterTimers[key].cardName, counters: summary });
         }
         delete cardCounterTimers[key];
@@ -730,7 +745,7 @@ function debouncedCmdDamageLog(pid, cmdUid, cmdName) {
     if (!p) return;
     const currentDmg = p.cmdDamage[cmdUid] ? p.cmdDamage[cmdUid].damage : 0;
     if (!cmdDamageTimers[key]) {
-        cmdDamageTimers[key] = { initial: currentDmg, timer: null, cmdName };
+        cmdDamageTimers[key] = { initial: currentDmg, initialLife: p.life, timer: null, cmdName };
     }
     if (cmdDamageTimers[key].timer) clearTimeout(cmdDamageTimers[key].timer);
     cmdDamageTimers[key].timer = setTimeout(() => {
@@ -740,7 +755,7 @@ function debouncedCmdDamageLog(pid, cmdUid, cmdName) {
         const initial = cmdDamageTimers[key].initial;
         const diff = nowDmg - initial;
         if (diff !== 0) {
-            addLogEntry({ type: 'cmdDamage', pid, playerName: getPlayerName(pid), cmdName: cmdDamageTimers[key].cmdName, amount: Math.abs(diff), from: initial, to: nowDmg, gained: diff > 0 });
+            addLogEntry({ type: 'cmdDamage', pid, playerName: getPlayerName(pid), cmdName: cmdDamageTimers[key].cmdName, amount: Math.abs(diff), from: initial, to: nowDmg, gained: diff > 0, lifeBefore: cmdDamageTimers[key].initialLife, life: pNow.life });
         }
         delete cmdDamageTimers[key];
     }, DEBOUNCE_MS);
@@ -859,6 +874,9 @@ io.on('connection', (socket) => {
             const library = deckData.library.map(c => makeData(c, pid));
             const command = deckData.command.map(c => makeData(c, pid));
 
+            // Snapshot commanders at game start so they persist across zone changes
+            const commanders = command.map(c => ({ uid: c.uid, name: c.name || 'Commander', _cacheId: c._cacheId || c.uid }));
+
             const tokens = (deckData.tokens || []).map(t => {
                 const tUid = Math.random().toString(36).substr(2, 9);
                 globalImageCache[tUid] = { front: t.image, back: t.backImage };
@@ -874,6 +892,7 @@ io.on('connection', (socket) => {
                 id: pid, name: finalName, life: 40,
                 poison: 0, energy: 0, isMonarch: false,
                 cmdDamage: {}, // keyed by commander uid: { uid, name, owner, damage }
+                commanders, // persistent list of commander identities
                 library, command, tokens,
                 hand: [], graveyard: [], exile: [], battlefield: []
             });
@@ -901,7 +920,12 @@ io.on('connection', (socket) => {
                 backImage: cacheData ? cacheData.back : null
             }, pid, true);
             token.x = x; token.y = y;
-            p.battlefield.push(token);
+            if (cardOrdering === 'bottom' || (cardOrdering === 'smart' && isAttachableCard(token))) {
+                p.battlefield.unshift(token);
+            } else {
+                p.battlefield.push(token);
+            }
+            addLogEntry({ type: 'tokenSpawn', pid, playerName: getPlayerName(pid), tokenName: template.name || 'Token' });
             io.emit('updateImageCache', globalImageCache);
             broadcastState();
         }
@@ -1076,9 +1100,15 @@ io.on('connection', (socket) => {
         }
         const key = `${pid}_${cmdUid}`;
         if (!cmdDamageTimers[key]) {
-            cmdDamageTimers[key] = { initial: p.cmdDamage[cmdUid].damage, timer: null, cmdName };
+            cmdDamageTimers[key] = { initial: p.cmdDamage[cmdUid].damage, initialLife: p.life, timer: null, cmdName };
         }
-        p.cmdDamage[cmdUid].damage = Math.max(0, p.cmdDamage[cmdUid].damage + amt);
+        const oldDmg = p.cmdDamage[cmdUid].damage;
+        p.cmdDamage[cmdUid].damage = Math.max(0, oldDmg + amt);
+        // Commander damage also affects life total (positive damage = life loss)
+        const actualDmgChange = p.cmdDamage[cmdUid].damage - oldDmg;
+        if (actualDmgChange !== 0) {
+            p.life -= actualDmgChange;
+        }
         debouncedCmdDamageLog(pid, cmdUid, cmdName);
         broadcastState();
     });
@@ -1111,6 +1141,47 @@ io.on('connection', (socket) => {
         if (p) shuffle(p.library);
         addLogEntry({ type: 'shuffle', pid, playerName: getPlayerName(pid) });
         broadcastState();
+    });
+
+    socket.on('logAssociation', ({ sourceName, targetName, sourceUid, targetUid, assocType }) => {
+        const pid = socketOwner[socket.id];
+        let message = '';
+        if (assocType === 'equipment') {
+            message = `${sourceName} became attached to ${targetName}`;
+        } else if (assocType === 'aura') {
+            message = `${sourceName} enchanted ${targetName}`;
+        } else if (assocType === 'copyToken') {
+            message = `Copied ${targetName}`;
+            // Transform the copy token: update name and clone target's image
+            if (sourceUid && targetUid) {
+                const p = gameState.players.find(x => x.id === pid);
+                if (p) {
+                    const allZones = ['battlefield', 'hand', 'command', 'graveyard', 'exile', 'library'];
+                    let token = null;
+                    for (const z of allZones) { token = (p[z] || []).find(c => c.uid === sourceUid); if (token) break; }
+                    if (token) {
+                        token.name = `${targetName} (Copy)`;
+                        // Clone target's image to the copy token
+                        if (globalImageCache[targetUid]) {
+                            globalImageCache[sourceUid] = { ...globalImageCache[targetUid] };
+                            io.emit('updateImageCache', { [sourceUid]: globalImageCache[sourceUid] });
+                        }
+                    }
+                }
+            }
+        } else if (assocType === 'reconfigure') {
+            message = `${sourceName} was reconfigured and attached to ${targetName}`;
+        }
+        if (message) {
+            addLogEntry({ type: 'association', pid, playerName: getPlayerName(pid), message });
+            broadcastState();
+        }
+    });
+
+    socket.on('setCardOrdering', ({ ordering }) => {
+        if (ordering === 'top' || ordering === 'bottom' || ordering === 'smart') {
+            cardOrdering = ordering;
+        }
     });
 
     socket.on('openInspect', ({ pid, zone }) => {
@@ -1159,6 +1230,10 @@ function doMoveCard(fromPid, fromZone, toPid, toZone, uid, x = 0.5, y = 0.5, met
     } else {
         if (index !== -1 && index <= tgtList.length) {
             tgtList.splice(index, 0, card);
+        } else if (toZone === 'battlefield' && cardOrdering === 'bottom') {
+            tgtList.unshift(card);
+        } else if (toZone === 'battlefield' && cardOrdering === 'smart') {
+            isAttachableCard(card) ? tgtList.unshift(card) : tgtList.push(card);
         } else {
             tgtList.push(card);
         }

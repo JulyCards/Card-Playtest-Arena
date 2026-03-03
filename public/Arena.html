@@ -671,6 +671,90 @@
             background: #555;
         }
 
+        /* === SETTINGS GEAR === */
+        #settingsBtn {
+            position: fixed;
+            top: 8px;
+            right: 15px;
+            z-index: 501;
+            background: none;
+            color: #888;
+            border: none;
+            cursor: pointer;
+            font-size: 1.3em;
+            padding: 4px;
+            line-height: 1;
+        }
+
+        #settingsBtn:hover {
+            color: #ccc;
+        }
+
+        #settingsPanel {
+            position: fixed;
+            top: 45px;
+            right: 15px;
+            width: 240px;
+            background: rgba(20, 20, 20, 0.97);
+            border: 1px solid #444;
+            border-radius: 8px;
+            display: none;
+            flex-direction: column;
+            z-index: 500;
+            font-size: 0.85em;
+            padding: 12px;
+        }
+
+        #settingsPanel.visible {
+            display: flex;
+        }
+
+        #settingsPanel h3 {
+            margin: 0 0 10px;
+            color: var(--accent);
+            font-size: 1em;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            color: #bbb;
+        }
+
+        .setting-row label {
+            font-size: 0.9em;
+        }
+
+        .toggle-group {
+            display: flex;
+            gap: 2px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .toggle-group button {
+            padding: 3px 10px;
+            background: #2a2a2a;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.15s;
+        }
+
+        .toggle-group button.active {
+            background: var(--accent);
+            color: #000;
+            font-weight: bold;
+        }
+
+        .toggle-group button:hover:not(.active) {
+            background: #444;
+        }
+
         /* === GAME TRACKERS === */
         .tracker-bar {
             display: flex;
@@ -923,6 +1007,14 @@
                 </div>
                 <button class="primary" style="width:100%" onclick="addCounter()">Add Note</button>
             </div>
+            <div id="metaSection" style="border-top:1px solid #444; margin-top:12px; padding-top:8px;">
+                <button
+                    style="width:100%; background:#2a2a2a; border:1px solid #555; color:#aaa; padding:6px; border-radius:6px; cursor:pointer; font-size:0.85em;"
+                    onclick="toggleMetaView()">📋 View Metadata</button>
+                <div id="metaContent"
+                    style="display:none; margin-top:8px; font-size:0.8em; color:#bbb; text-align:left; background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:8px; max-height:200px; overflow-y:auto;">
+                </div>
+            </div>
             <button class="danger" style="width:100%; margin-top:20px;" onclick="deleteActiveCard()">Delete
                 Card</button>
         </div>
@@ -941,6 +1033,20 @@
 
     <div class="modal-overlay" id="previewModal" onclick="this.style.display='none'" style="z-index:3000;">
         <img id="previewImg" style="max-height:90vh; max-width:90vw; border:2px solid white; border-radius:10px;">
+    </div>
+
+    <!-- Settings Gear -->
+    <button id="settingsBtn" onclick="toggleSettingsPanel()" title="Settings">⚙</button>
+    <div id="settingsPanel">
+        <h3>⚙ Settings</h3>
+        <div class="setting-row">
+            <label>Card Ordering</label>
+            <div class="toggle-group">
+                <button id="orderTop" onclick="setCardOrdering('top')">Top</button>
+                <button id="orderBottom" onclick="setCardOrdering('bottom')">Bottom</button>
+                <button id="orderSmart" class="active" onclick="setCardOrdering('smart')">Smart</button>
+            </div>
+        </div>
     </div>
 
     <!-- Game Log -->
@@ -967,6 +1073,10 @@
         let localImageCache = {};
         let viewState = { left: null, right: null };
         let pendingState = null;
+        let pendingAssociation = null;
+
+        // Arena settings (client-side)
+        const arenaSettings = { cardOrdering: 'smart' };
 
         // --- CONSTANTS ---
         const KW_MAP = { "flying": "FLY", "reach": "RCH", "haste": "HST", "deathtouch": "DTH", "hexproof": "HXP", "lifelink": "LFL", "first strike": "FST", "double strike": "DST", "vigilance": "VGL", "trample": "TRP", "menace": "MNC", "indestructible": "IND" };
@@ -1031,6 +1141,16 @@
         function toggleLogPanel() {
             document.getElementById('logPanel').classList.toggle('visible');
         }
+        function toggleSettingsPanel() {
+            document.getElementById('settingsPanel').classList.toggle('visible');
+        }
+        function setCardOrdering(mode) {
+            arenaSettings.cardOrdering = mode;
+            document.getElementById('orderTop').classList.toggle('active', mode === 'top');
+            document.getElementById('orderBottom').classList.toggle('active', mode === 'bottom');
+            document.getElementById('orderSmart').classList.toggle('active', mode === 'smart');
+            socket.emit('setCardOrdering', { ordering: mode });
+        }
 
         function copyFullLog() {
             const lines = logEntries.map(entry => {
@@ -1075,6 +1195,7 @@
             monarch: '#d4a940',     // Amber
             dayNight: '#7ab',       // Teal
             cmdDamage: '#a33',      // Dark red
+            association: '#d48520', // Dark orange
             default: '#aaa'         // Light grey
         };
 
@@ -1101,6 +1222,8 @@
             if (entry.type === 'monarch') return LOG_COLORS.monarch;
             if (entry.type === 'dayNight') return LOG_COLORS.dayNight;
             if (entry.type === 'cmdDamage') return LOG_COLORS.cmdDamage;
+            if (entry.type === 'association') return LOG_COLORS.association;
+            if (entry.type === 'tokenSpawn') return LOG_COLORS.association;
             return LOG_COLORS.default;
         }
 
@@ -1129,11 +1252,19 @@
 
                 if (entry.fromZone === 'library' && entry.toZone === 'hand') {
                     // Library -> Hand = draw
-                    text = `(${toName}) Drew a card`;
+                    text = `${toName} drew a card`;
+                } else if (entry.fromZone === 'hand' && entry.toZone === 'battlefield' && entry.fromPid === entry.toPid) {
+                    // Hand -> Battlefield (same player) = played
+                    text = `${fromName} played ${entry.cardName}`;
                 } else if (entry.fromZone === 'hand' && entry.toZone === 'library') {
                     // Hand -> Library
-                    const methodLabel = { top: 'top', bottom: 'bottom', shuffle: 'shuffle in' };
-                    text = `(${fromName}) put a card from their hand ${methodLabel[entry.method] || 'top'}`;
+                    if (entry.method === 'shuffle') {
+                        text = `${fromName} shuffled a card from their hand into their library`;
+                    } else if (entry.method === 'bottom') {
+                        text = `${fromName} put a card from their hand onto the bottom of their library`;
+                    } else {
+                        text = `${fromName} put a card from their hand on top of their library`;
+                    }
                 } else if (fromHidden && toHidden) {
                     // Both hidden
                     text = `(${fromName}) moved a card (${entry.fromZone} → ${entry.toZone})`;
@@ -1178,6 +1309,13 @@
             } else if (entry.type === 'cmdDamage') {
                 const verb = entry.gained ? 'took' : 'removed';
                 text = `⚔ ${entry.playerName} ${verb} ${entry.amount} commander damage from ${entry.cmdName} (${entry.from} → ${entry.to})`;
+                if (entry.gained && entry.lifeBefore != null) {
+                    text += `<br>   ${entry.playerName} lost ${entry.amount} life (${entry.lifeBefore} → ${entry.life})`;
+                }
+            } else if (entry.type === 'association') {
+                text = entry.message;
+            } else if (entry.type === 'tokenSpawn') {
+                text = `${entry.playerName} created a ${entry.tokenName} token`;
             } else {
                 text = JSON.stringify(entry);
             }
@@ -1252,6 +1390,9 @@
 
         function renderViewport(containerId, pid) {
             const cont = document.getElementById(containerId);
+            // Save the current life input value before clearing the DOM
+            const existingLifeInput = cont.querySelector(`#life-${pid}`);
+            const savedLifeVal = existingLifeInput ? existingLifeInput.value : null;
             cont.innerHTML = '';
             if (!pid) return;
             const p = gameState.players.find(x => x.id === pid);
@@ -1260,8 +1401,8 @@
             const header = document.createElement('div');
             header.className = 'board-header';
             const isMyView = (pid === myPid);
-            const lifeDisplay = (isMyView && Date.now() - lastLifeUpdate < 2000)
-                ? (document.getElementById(`life-${p.id}`)?.value || p.life) : p.life;
+            const lifeDisplay = (isMyView && Date.now() - lastLifeUpdate < 2000 && savedLifeVal !== null)
+                ? savedLifeVal : p.life;
 
             const monarchActive = p.isMonarch ? 'active' : '';
             const dayNightIcon = gameState.isDayTime ? '☀️' : '🌙';
@@ -1359,10 +1500,11 @@
         }
 
         function getAllCommanders() {
-            // Collect all commanders from all players
+            // Use the persistent commanders list (set at game start) so they stay
+            // in the damage tracker regardless of which zone they move to
             const cmds = [];
             for (const p of gameState.players) {
-                for (const c of (p.command || [])) {
+                for (const c of (p.commanders || [])) {
                     cmds.push({ uid: c.uid, name: c.name || 'Commander', owner: p.id, ownerName: p.name, _cacheId: c._cacheId || c.uid });
                 }
             }
@@ -1523,16 +1665,40 @@
                 el.ondragstart = (e) => startDrag(e, data.uid, pid, zone, imgUrl);
 
                 if (zone !== 'hand') {
-                    el.ondragover = (e) => { if (activeModal) { e.preventDefault(); el.classList.add('drag-over'); } };
+                    el.ondragover = (e) => {
+                        if (activeModal) { e.preventDefault(); el.classList.add('drag-over'); }
+                        // Allow drop on battlefield cards for association detection
+                        if (zone === 'battlefield' && currentDrag && currentDrag.uid !== data.uid) {
+                            e.preventDefault(); el.classList.add('drag-over');
+                        }
+                    };
                     el.ondragleave = () => el.classList.remove('drag-over');
                     el.ondrop = (e) => {
+                        el.classList.remove('drag-over');
                         if (activeModal && currentDrag) {
                             e.preventDefault(); e.stopPropagation();
-                            el.classList.remove('drag-over');
                             if (currentDrag.fromPid === pid && currentDrag.sourceZone === zone) {
                                 socket.emit('reorderZone', { pid: pid, zone: zone, uid: currentDrag.uid, targetUid: data.uid });
                             }
+                            return;
                         }
+                        // Association detection: store pending so it fires AFTER the move/play log
+                        if (zone === 'battlefield' && currentDrag && currentDrag.uid !== data.uid) {
+                            const draggedCard = findCardData(currentDrag.uid, currentDrag.fromPid);
+                            if (draggedCard) {
+                                const assocType = getAssociationType(draggedCard);
+                                if (assocType) {
+                                    pendingAssociation = {
+                                        sourceName: draggedCard.name || 'Unknown',
+                                        targetName: data.name || 'Unknown',
+                                        sourceUid: currentDrag.uid,
+                                        targetUid: data.uid,
+                                        assocType
+                                    };
+                                }
+                            }
+                        }
+                        // Let the event bubble to the battlefield for normal drop handling
                     };
                 }
             }
@@ -1566,6 +1732,27 @@
                 el.appendChild(strip);
             }
             return el;
+        }
+
+        function findCardData(uid, pid) {
+            const p = gameState.players.find(x => x.id === pid);
+            if (!p) return null;
+            for (const z of ['battlefield', 'hand', 'command', 'graveyard', 'exile', 'library']) {
+                const c = (p[z] || []).find(c => c.uid === uid);
+                if (c) return c;
+            }
+            return null;
+        }
+
+        function getAssociationType(card) {
+            const m = card.meta;
+            const typeLine = (m && m.type_line) ? m.type_line.toLowerCase() : '';
+            const keywords = (m && m.keywords) ? m.keywords.map(k => k.toLowerCase()) : [];
+            if (keywords.includes('reconfigure')) return 'reconfigure';
+            if (typeLine.includes('equipment')) return 'equipment';
+            if (typeLine.includes('aura')) return 'aura';
+            if (card.isToken && card.name && card.name.toLowerCase().includes('copy') && !card.name.includes('(Copy)')) return 'copyToken';
+            return null;
         }
 
         function allowDrop(e, pid, zone) {
@@ -1613,6 +1800,11 @@
                 document.getElementById('dropModal').style.display = 'flex';
             } else {
                 emitMove(fromPid, sourceZone, toPid, toZone, uid, x, y, 'top', index);
+            }
+            // Emit pending association after the move so it appears after the 'played' log
+            if (pendingAssociation) {
+                socket.emit('logAssociation', pendingAssociation);
+                pendingAssociation = null;
             }
         }
 
@@ -1681,8 +1873,48 @@
         function openCounterManager(uid, pid, zone) {
             activeCardId = { uid, pid, zone };
             document.getElementById('counterModal').style.display = 'flex';
+            document.getElementById('metaContent').style.display = 'none';
             renderCounters();
             setTimeout(() => document.getElementById('cntInputName').focus(), 100);
+        }
+        function toggleMetaView() {
+            const el = document.getElementById('metaContent');
+            if (el.style.display === 'none') {
+                renderMeta();
+                el.style.display = 'block';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+        function renderMeta() {
+            const { uid, pid, zone } = activeCardId;
+            const p = gameState.players.find(x => x.id === pid);
+            const card = p[zone].find(c => c.uid === uid);
+            const el = document.getElementById('metaContent');
+            if (!card) { el.innerHTML = '<em>Card not found</em>'; return; }
+            const m = card.meta;
+            if (!m) { el.innerHTML = `<strong>${card.name || 'Unknown'}</strong><br><em style="color:#666;">No metadata available.</em>`; return; }
+            const row = (label, val) => val ? `<div style="margin-bottom:4px;"><span style="color:#888;">${label}:</span> ${val}</div>` : '';
+            let html = `<div style="margin-bottom:6px;font-size:1.1em;font-weight:bold;color:#e0e0e0;">${card.name || 'Unknown'}</div>`;
+            html += row('Type', m.type_line);
+            html += row('Mana Cost', m.mana_cost);
+            html += row('Mana Value', m.cmc != null ? m.cmc : null);
+            html += row('Colors', (m.colors || []).length > 0 ? m.colors.join(', ') : null);
+            html += row('Color ID', (m.color_identity || []).length > 0 ? m.color_identity.join(', ') : null);
+            html += row('Keywords', (m.keywords || []).length > 0 ? m.keywords.join(', ') : null);
+            if (m.power != null || m.toughness != null) html += row('P/T', `${m.power || '?'}/${m.toughness || '?'}`);
+            html += row('Rarity', m.rarity);
+            html += row('Set', m.set_name);
+            html += row('DFC', m.is_dfc ? 'Yes' : null);
+            if (m.oracle_text) {
+                html += `<div style="margin-top:6px;border-top:1px solid #333;padding-top:6px;"><span style="color:#888;">Oracle Text:</span><div style="white-space:pre-wrap;margin-top:3px;color:#ccc;">${m.oracle_text}</div></div>`;
+            }
+            if (m.back_oracle_text) {
+                html += `<div style="margin-top:6px;border-top:1px solid #333;padding-top:6px;"><span style="color:#888;">Back Face:</span>`;
+                if (m.back_type_line) html += `<div style="color:#aaa;">${m.back_type_line}</div>`;
+                html += `<div style="white-space:pre-wrap;margin-top:3px;color:#ccc;">${m.back_oracle_text}</div></div>`;
+            }
+            el.innerHTML = html;
         }
         function renderCounters() {
             const { uid, pid, zone } = activeCardId;
