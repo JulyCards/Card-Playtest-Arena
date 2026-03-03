@@ -623,8 +623,8 @@
         <h2 style="margin-bottom: 10px;">Getting your deck ready!</h2>
         <div class="warning-text">
             This may take a few minutes...
-            <span class="critical-warning">WARNING: If your Moxfield deck is set to private, the download will not
-                complete! Make sure your deck is public or unlisted before downloading!</span>
+            <span class="critical-warning">WARNING: Your deck must be public or unlisted on Moxfield/Archidekt
+                for the download to complete!</span>
         </div>
         <div id="currentCardMsg">Starting...</div>
         <div class="progress-container">
@@ -638,8 +638,9 @@
             <h2>Deck Forge</h2>
 
             <h3>1. Import / Load</h3>
-            <input type="text" id="moxfieldUrl" placeholder="https://moxfield.com/decks/..." onfocus="this.select()">
-            <button class="btn-green btn-block" onclick="startMoxfieldImport()">⬇️ Import from Moxfield</button>
+            <input type="text" id="deckImportUrl" placeholder="Moxfield or Archidekt deck URL..."
+                onfocus="this.select()">
+            <button class="btn-green btn-block" onclick="startDeckImport()">⬇️ Import from URL</button>
             <button class="btn-block" onclick="document.getElementById('loadJsonInput').click()"
                 style="margin-top:5px;">📂 Load Existing Deck JSON</button>
             <input type="file" id="loadJsonInput" accept=".json" style="display:none" onchange="loadDeckJSON()">
@@ -1030,17 +1031,27 @@
         }
 
         // === IMPORT LOGIC ===
-        // Moxfield API is fetched server-side to bypass CORS and Cloudflare.
-        async function startMoxfieldImport() {
-            const url = document.getElementById('moxfieldUrl').value;
-            if (!url.includes("moxfield.com/decks/")) return alert("Invalid URL — must be a Moxfield deck link.");
+        // Unified import: detects Moxfield or Archidekt URL and routes accordingly.
+        async function startDeckImport() {
+            const url = document.getElementById('deckImportUrl').value.trim();
+
+            if (url.includes('moxfield.com/decks/')) {
+                return startMoxfieldImport(url);
+            } else if (url.includes('archidekt.com/decks/')) {
+                return startArchidektImport(url);
+            } else {
+                return alert('Invalid URL — paste a Moxfield or Archidekt deck link.');
+            }
+        }
+
+        // --- Moxfield Import ---
+        async function startMoxfieldImport(url) {
             showLoading(true);
             document.getElementById('currentCardMsg').innerText = "Fetching deck list from Moxfield...";
 
             const deckId = url.split('/decks/')[1].split(/[?#]/)[0];
 
             try {
-                // Step 1: Server proxies Moxfield API (bypasses CORS + Cloudflare)
                 const moxResp = await fetch(`/api/builder/moxfield-proxy?id=${deckId}`);
                 if (!moxResp.ok) {
                     const errData = await moxResp.json().catch(() => ({}));
@@ -1050,14 +1061,11 @@
 
                 document.getElementById('currentCardMsg').innerText = "Deck list received! Downloading card images...";
 
-                // Step 2: Extract card lists — handle both v2 and v3 API formats
                 let commanders, library, tokens;
                 if (mox.boards) {
-                    // v3 format: boards.commanders.cards, boards.mainboard.cards
                     commanders = Object.values((mox.boards.commanders || {}).cards || {});
                     library = Object.values((mox.boards.mainboard || {}).cards || {});
                 } else {
-                    // v2 format: top-level commanders, mainboard
                     commanders = Object.values(mox.commanders || {});
                     library = Object.values(mox.mainboard || {});
                 }
@@ -1071,8 +1079,69 @@
                 });
 
                 if (!resp.ok) throw new Error("Server error starting import");
+                pollInterval = setInterval(checkProgress, 500);
 
-                // Step 3: Poll for progress
+            } catch (err) {
+                alert("Import Error: " + err.message);
+                showLoading(false);
+            }
+        }
+
+        // --- Archidekt Import ---
+        const ARCHIDEKT_SKIP_CATEGORIES = ['Maybeboard', 'Sideboard'];
+
+        async function startArchidektImport(url) {
+            showLoading(true);
+            document.getElementById('currentCardMsg').innerText = "Fetching deck list from Archidekt...";
+
+            // Extract numeric deck ID from URL like archidekt.com/decks/20490498/...
+            const match = url.match(/\/decks\/(\d+)/);
+            if (!match) return (alert('Could not extract deck ID from Archidekt URL.'), showLoading(false));
+            const deckId = match[1];
+
+            try {
+                const resp = await fetch(`/api/builder/archidekt-proxy?id=${deckId}`);
+                if (!resp.ok) {
+                    const errData = await resp.json().catch(() => ({}));
+                    throw new Error(errData.error || "Could not fetch deck from Archidekt.");
+                }
+                const arch = await resp.json();
+
+                document.getElementById('currentCardMsg').innerText = "Deck list received! Downloading card images...";
+
+                // Map Archidekt cards to the format runImportFromCards expects:
+                // { card: { scryfall_id, name }, quantity }
+                const commanders = [];
+                const library = [];
+
+                for (const entry of (arch.cards || [])) {
+                    // Skip maybeboard/sideboard
+                    if (entry.categories.some(c => ARCHIDEKT_SKIP_CATEGORIES.includes(c))) continue;
+
+                    const mapped = {
+                        quantity: entry.quantity || 1,
+                        card: {
+                            scryfall_id: entry.card.uid,
+                            name: entry.card.oracleCard.name
+                        }
+                    };
+
+                    if (entry.categories.includes('Commander')) {
+                        commanders.push(mapped);
+                    } else {
+                        library.push(mapped);
+                    }
+                }
+
+                const deckName = arch.name || "Imported";
+
+                const importResp = await fetch('/api/builder/import-cards', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deckName, commanders, library, tokens: [] })
+                });
+
+                if (!importResp.ok) throw new Error("Server error starting import");
                 pollInterval = setInterval(checkProgress, 500);
 
             } catch (err) {

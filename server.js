@@ -121,6 +121,7 @@ async function fetchScryfallMetadata(sid, name) {
 }
 
 // --- Process Single Card ---
+// Returns { cards: [...], relatedTokens: [{scryfall_id, name}] }
 async function processSingleCard(item, isToken = false) {
     const cardObj = isToken ? item : (item.card || {});
     const qty = item.quantity || 1;
@@ -138,6 +139,7 @@ async function processSingleCard(item, isToken = false) {
         rarity: null, set_name: null, is_dfc: false,
         back_oracle_text: null, back_type_line: null
     };
+    const relatedTokens = [];
 
     const scryfallData = await fetchScryfallMetadata(sid, name);
 
@@ -154,6 +156,15 @@ async function processSingleCard(item, isToken = false) {
         meta.rarity = scryfallData.rarity || null;
         meta.set_name = scryfallData.set_name || null;
         meta.oracle_text = scryfallData.oracle_text || null;
+
+        // Collect related tokens from Scryfall all_parts
+        if (scryfallData.all_parts) {
+            for (const part of scryfallData.all_parts) {
+                if (part.component === 'token') {
+                    relatedTokens.push({ scryfall_id: part.id, name: part.name });
+                }
+            }
+        }
 
         try {
             // Extract face-level metadata for ANY multi-face card (DFC, adventure, split, etc.)
@@ -198,10 +209,10 @@ async function processSingleCard(item, isToken = false) {
             name, front: frontImg, back: backImg, is_flipped: false,
             meta, _modified: Date.now()
         };
-        return Array.from({ length: qty }, () => ({ ...cardData, meta: { ...meta } }));
+        return { cards: Array.from({ length: qty }, () => ({ ...cardData, meta: { ...meta } })), relatedTokens };
     } else {
         console.log(`[FAILED] ${name}`);
-        return [];
+        return { cards: [], relatedTokens };
     }
 }
 
@@ -217,7 +228,7 @@ async function processCardsParallel(items, isToken = false) {
     return results;
 }
 
-// --- Import Job from pre-fetched card lists (browser fetches Moxfield, server downloads images) ---
+// --- Import Job from pre-fetched card lists (browser fetches Moxfield/Archidekt, server downloads images) ---
 async function runImportFromCards(deckName, commanders, library, tokens) {
     try {
         currentJob = { active: true, progress: 0, total: 0, message: "Starting image downloads...", result: null, error: null, missing: [], done: false };
@@ -227,13 +238,24 @@ async function runImportFromCards(deckName, commanders, library, tokens) {
         // Build only the imported cards — client will merge with existing deck
         const imported = { deckName: deckName || "Imported", command: [], library: [], tokens: [] };
 
+        // Track discovered token Scryfall IDs from all_parts (for auto-discovery)
+        const discoveredTokenIds = new Map(); // scryfall_id -> name
+
         const trackProcess = async (item, isTok = false) => {
-            const res = await processSingleCard(item, isTok);
-            if (!res || res.length === 0) {
+            const result = await processSingleCard(item, isTok);
+            if (!result.cards || result.cards.length === 0) {
                 const c = isTok ? item : (item.card || {});
                 currentJob.missing.push(c.name || 'Unknown');
             }
-            return res;
+            // Collect discovered tokens (only from non-token cards)
+            if (!isTok && result.relatedTokens) {
+                for (const t of result.relatedTokens) {
+                    if (!discoveredTokenIds.has(t.scryfall_id)) {
+                        discoveredTokenIds.set(t.scryfall_id, t.name);
+                    }
+                }
+            }
+            return result.cards;
         };
 
         // Process commanders
@@ -250,11 +272,25 @@ async function runImportFromCards(deckName, commanders, library, tokens) {
             for (const r of results) imported.library.push(...r);
         }
 
-        // Process tokens
+        // Process explicit tokens (from Moxfield)
         for (let i = 0; i < tokens.length; i += MAX_WORKERS) {
             const batch = tokens.slice(i, i + MAX_WORKERS);
             const results = await Promise.all(batch.map(item => trackProcess(item, true)));
             for (const r of results) imported.tokens.push(...r);
+        }
+
+        // Auto-discover tokens from Scryfall all_parts (for imports without explicit tokens, e.g. Archidekt)
+        if (tokens.length === 0 && discoveredTokenIds.size > 0) {
+            console.log(`[Tokens] Auto-discovered ${discoveredTokenIds.size} tokens from Scryfall data`);
+            currentJob.total += discoveredTokenIds.size;
+            const tokenItems = [...discoveredTokenIds.entries()].map(([sid, name]) => ({
+                scryfall_id: sid, name
+            }));
+            for (let i = 0; i < tokenItems.length; i += MAX_WORKERS) {
+                const batch = tokenItems.slice(i, i + MAX_WORKERS);
+                const results = await Promise.all(batch.map(item => trackProcess(item, true)));
+                for (const r of results) imported.tokens.push(...r);
+            }
         }
 
         currentJob.result = imported;
@@ -324,6 +360,33 @@ app.get('/api/builder/moxfield-proxy', async (req, res) => {
     } catch (e) {
         console.error('Moxfield proxy error:', e.message);
         res.status(502).json({ error: `Could not fetch deck from Moxfield. Is it public/unlisted? (${e.message})` });
+    }
+});
+
+// Archidekt proxy — fetch deck JSON server-side to bypass CORS
+app.get('/api/builder/archidekt-proxy', async (req, res) => {
+    const deckId = req.query.id;
+    if (!deckId || !/^\d+$/.test(deckId)) return res.status(400).json({ error: 'Missing or invalid deck ID' });
+
+    try {
+        const resp = await fetch(`https://archidekt.com/api/decks/${deckId}/`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Accept': 'application/json'
+            },
+            signal: AbortSignal.timeout(15000)
+        });
+        if (!resp.ok) {
+            return res.status(resp.status).json({ error: `Archidekt returned ${resp.status}. Is the deck public?` });
+        }
+        const data = await resp.json();
+        if (!data || !data.cards) {
+            throw new Error('Invalid response from Archidekt');
+        }
+        res.json(data);
+    } catch (e) {
+        console.error('Archidekt proxy error:', e.message);
+        res.status(502).json({ error: `Could not fetch deck from Archidekt. (${e.message})` });
     }
 });
 
