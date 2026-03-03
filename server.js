@@ -623,10 +623,137 @@ const ADJECTIVES = ["Abrasive", "Abrupt", "Acidic", "Active", "Aggressive", "Agi
 const NOUNS = ["Acacia", "Acanthus", "Acorn Squash", "Agapanthus", "Alfalfa", "Allium", "Almond", "Aloe Vera", "Amaranth", "Amaryllis", "Anemone", "Angelica", "Anise", "Apple", "Apricot", "Artichoke", "Arugula", "Asparagus", "Aster", "Aubergine", "Avocado", "Azalea", "Bamboo", "Banana", "Basil", "Bean", "Beet", "Begonia", "Bell Pepper", "Bergamot", "Bilberry", "Blackberry", "Bluebell", "Blueberry", "Bok Choy", "Broccoli", "Buttercup", "Cabbage", "Cactus", "Calendula", "Camellia", "Cantaloupe", "Carnation", "Carrot", "Cauliflower", "Celery", "Chamomile", "Chard", "Cherry", "Chestnut", "Chickpea", "Chili Pepper", "Chrysanthemum", "Cilantro", "Clementine", "Clover", "Coconut", "Corn", "Cornflower", "Cosmos", "Cranberry", "Crocus", "Cucumber", "Currant", "Cyclamen", "Daffodil", "Dahlia", "Daisy", "Dandelion", "Date", "Daylily", "Delphinium", "Dill", "Dragon Fruit", "Elderberry", "Fennel", "Fern", "Fig", "Foxglove", "Freesia", "Fuchsia", "Gardenia", "Garlic", "Geranium", "Ginger", "Gladiolus", "Goldenrod", "Gooseberry", "Grape", "Grapefruit", "Guava", "Hazelnut", "Heather", "Hibiscus", "Holly", "Honeydew", "Honeysuckle", "Hops", "Hyacinth", "Hydrangea", "Iris", "Ivy", "Jasmine", "Juniper", "Kale", "Kiwi", "Kumquat", "Lavender", "Leek", "Lemon", "Lettuce", "Lilac", "Lily", "Lime", "Lotus", "Lychee", "Magnolia", "Mango", "Marigold", "Melon", "Mint", "Mushroom", "Narcissus", "Nasturtium", "Nectarine", "Nutmeg", "Oak", "Olive", "Onion", "Orange", "Orchid", "Oregano", "Pansy", "Papaya", "Parsley", "Peach", "Pear", "Peony", "Pepper", "Peppermint", "Persimmon", "Petunia", "Pine", "Pineapple", "Pistachio", "Plum", "Pomegranate", "Poppy", "Potato", "Pumpkin", "Radish", "Raspberry", "Rose", "Rosemary", "Sage", "Snapdragon", "Snowdrop", "Spinach", "Squash", "Starfruit", "Strawberry", "Sunflower", "Tangerine", "Tea", "Thistle", "Thyme", "Tomato", "Tulip", "Turnip", "Violet", "Walnut", "Watermelon", "Wheat", "Wisteria", "Yam", "Yarrow", "Zinnia", "Zucchini", "Basilisk", "Behemoth", "Centaur", "Cerberus", "Chimera", "Cyclops", "Dragon", "Drake", "Dryad", "Dwarf", "Elf", "Gargoyle", "Ghost", "Ghoul", "Giant", "Goblin", "Golem", "Griffin", "Hydra", "Imp", "Kobold", "Kraken", "Lich", "Manticore", "Medusa", "Mimic", "Minotaur", "Nymph", "Ogre", "Orc", "Owlbear", "Pegasus", "Phoenix", "Satyr", "Skeleton", "Sphinx", "Spirit", "Sprite", "Treant", "Troll", "Unicorn", "Vampire", "Werewolf", "Wraith", "Wyvern", "Yeti", "Zombie"];
 
 // --- STATE ---
-let gameState = { players: [], active: false };
+let gameState = { players: [], active: false, isDayTime: true };
 let socketOwner = {};
 let globalImageCache = {};
 let gameLog = []; // Dev log: full card movement history
+
+// --- Debounced Counter Logging (unified) ---
+// All use 1.8s idle timers. Each map is keyed by a unique key for the counter.
+const DEBOUNCE_MS = 1800;
+const lifeDebounceTimers = {};      // key: pid
+const poisonDebounceTimers = {};    // key: pid
+const energyDebounceTimers = {};    // key: pid
+const cardCounterTimers = {};       // key: pid_uid
+const cmdDamageTimers = {};         // key: pid_cmdUid
+
+function debouncedLifeLog(pid) {
+    const p = gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    if (!lifeDebounceTimers[pid]) {
+        lifeDebounceTimers[pid] = { initial: p.life, timer: null };
+    }
+    if (lifeDebounceTimers[pid].timer) clearTimeout(lifeDebounceTimers[pid].timer);
+    lifeDebounceTimers[pid].timer = setTimeout(() => {
+        const pNow = gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete lifeDebounceTimers[pid]; return; }
+        const initial = lifeDebounceTimers[pid].initial;
+        const diff = pNow.life - initial;
+        if (diff > 0) {
+            addLogEntry({ type: 'lifeGain', pid, playerName: getPlayerName(pid), amount: diff, from: initial, to: pNow.life });
+        } else if (diff < 0) {
+            addLogEntry({ type: 'lifeLoss', pid, playerName: getPlayerName(pid), amount: Math.abs(diff), from: initial, to: pNow.life });
+        }
+        delete lifeDebounceTimers[pid];
+    }, DEBOUNCE_MS);
+}
+
+function debouncedPoisonLog(pid) {
+    const p = gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    if (!poisonDebounceTimers[pid]) {
+        poisonDebounceTimers[pid] = { initial: p.poison, timer: null };
+    }
+    if (poisonDebounceTimers[pid].timer) clearTimeout(poisonDebounceTimers[pid].timer);
+    poisonDebounceTimers[pid].timer = setTimeout(() => {
+        const pNow = gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete poisonDebounceTimers[pid]; return; }
+        const initial = poisonDebounceTimers[pid].initial;
+        const diff = pNow.poison - initial;
+        if (diff !== 0) {
+            addLogEntry({ type: 'poison', pid, playerName: getPlayerName(pid), amount: Math.abs(diff), from: initial, to: pNow.poison, gained: diff > 0 });
+        }
+        delete poisonDebounceTimers[pid];
+    }, DEBOUNCE_MS);
+}
+
+function debouncedEnergyLog(pid) {
+    const p = gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    if (!energyDebounceTimers[pid]) {
+        energyDebounceTimers[pid] = { initial: p.energy, timer: null };
+    }
+    if (energyDebounceTimers[pid].timer) clearTimeout(energyDebounceTimers[pid].timer);
+    energyDebounceTimers[pid].timer = setTimeout(() => {
+        const pNow = gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete energyDebounceTimers[pid]; return; }
+        const initial = energyDebounceTimers[pid].initial;
+        const diff = pNow.energy - initial;
+        if (diff !== 0) {
+            addLogEntry({ type: 'energy', pid, playerName: getPlayerName(pid), amount: Math.abs(diff), from: initial, to: pNow.energy, gained: diff > 0 });
+        }
+        delete energyDebounceTimers[pid];
+    }, DEBOUNCE_MS);
+}
+
+function debouncedCardCounterLog(pid, uid, cardName) {
+    const key = `${pid}_${uid}`;
+    const p = gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    // Find card across all zones
+    const allZones = ['battlefield', 'command', 'hand', 'library', 'graveyard', 'exile'];
+    let card = null;
+    for (const z of allZones) { card = (p[z] || []).find(c => c.uid === uid); if (card) break; }
+    if (!card) return;
+    if (!cardCounterTimers[key]) {
+        cardCounterTimers[key] = { initial: JSON.stringify(card.counters || []), timer: null, cardName };
+    }
+    if (cardCounterTimers[key].timer) clearTimeout(cardCounterTimers[key].timer);
+    cardCounterTimers[key].timer = setTimeout(() => {
+        const pNow = gameState.players.find(x => x.id === pid);
+        let cardNow = null;
+        if (pNow) { for (const z of allZones) { cardNow = (pNow[z] || []).find(c => c.uid === uid); if (cardNow) break; } }
+        const initialStr = cardCounterTimers[key].initial;
+        const currentStr = JSON.stringify(cardNow ? (cardNow.counters || []) : []);
+        if (initialStr !== currentStr) {
+            const countersNow = cardNow ? (cardNow.counters || []) : [];
+            const summary = countersNow.length > 0 ? countersNow.join(', ') : 'none';
+            addLogEntry({ type: 'counterChange', pid, playerName: getPlayerName(pid), cardName: cardCounterTimers[key].cardName, counters: summary });
+        }
+        delete cardCounterTimers[key];
+    }, DEBOUNCE_MS);
+}
+
+function debouncedCmdDamageLog(pid, cmdUid, cmdName) {
+    const key = `${pid}_${cmdUid}`;
+    const p = gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    const currentDmg = p.cmdDamage[cmdUid] ? p.cmdDamage[cmdUid].damage : 0;
+    if (!cmdDamageTimers[key]) {
+        cmdDamageTimers[key] = { initial: currentDmg, timer: null, cmdName };
+    }
+    if (cmdDamageTimers[key].timer) clearTimeout(cmdDamageTimers[key].timer);
+    cmdDamageTimers[key].timer = setTimeout(() => {
+        const pNow = gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete cmdDamageTimers[key]; return; }
+        const nowDmg = pNow.cmdDamage[cmdUid] ? pNow.cmdDamage[cmdUid].damage : 0;
+        const initial = cmdDamageTimers[key].initial;
+        const diff = nowDmg - initial;
+        if (diff !== 0) {
+            addLogEntry({ type: 'cmdDamage', pid, playerName: getPlayerName(pid), cmdName: cmdDamageTimers[key].cmdName, amount: Math.abs(diff), from: initial, to: nowDmg, gained: diff > 0 });
+        }
+        delete cmdDamageTimers[key];
+    }, DEBOUNCE_MS);
+}
+
+function clearAllDebounceTimers() {
+    for (const map of [lifeDebounceTimers, poisonDebounceTimers, energyDebounceTimers, cardCounterTimers, cmdDamageTimers]) {
+        for (const key of Object.keys(map)) {
+            if (map[key].timer) clearTimeout(map[key].timer);
+            delete map[key];
+        }
+    }
+}
 
 function addLogEntry(entry) {
     entry.time = Date.now();
@@ -694,7 +821,7 @@ function broadcastState() {
             return p;
         });
 
-        socket.emit('stateUpdate', { players: secretPlayers, active: gameState.active });
+        socket.emit('stateUpdate', { players: secretPlayers, active: gameState.active, isDayTime: gameState.isDayTime });
     });
 }
 
@@ -745,6 +872,8 @@ io.on('connection', (socket) => {
 
             gameState.players.push({
                 id: pid, name: finalName, life: 40,
+                poison: 0, energy: 0, isMonarch: false,
+                cmdDamage: {}, // keyed by commander uid: { uid, name, owner, damage }
                 library, command, tokens,
                 hand: [], graveyard: [], exile: [], battlefield: []
             });
@@ -822,10 +951,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('resetGame', () => {
-        gameState.players = [];
+        gameState = { players: [], active: false, isDayTime: true };
         socketOwner = {};
         globalImageCache = {};
         gameLog = [];
+        clearAllDebounceTimers();
         io.emit('updateImageCache', {});
         broadcastState();
         io.emit('resetClient');
@@ -871,12 +1001,85 @@ io.on('connection', (socket) => {
 
     socket.on('modLife', ({ pid, amt }) => {
         const p = gameState.players.find(x => x.id === pid);
-        if (p) p.life += amt;
+        if (!p) return;
+        if (!lifeDebounceTimers[pid]) {
+            lifeDebounceTimers[pid] = { initial: p.life, timer: null };
+        }
+        p.life += amt;
+        debouncedLifeLog(pid);
         broadcastState();
     });
     socket.on('setLife', ({ pid, value }) => {
         const p = gameState.players.find(x => x.id === pid);
-        if (p) p.life = value;
+        if (!p) return;
+        if (!lifeDebounceTimers[pid]) {
+            lifeDebounceTimers[pid] = { initial: p.life, timer: null };
+        }
+        p.life = value;
+        debouncedLifeLog(pid);
+        broadcastState();
+    });
+
+    // --- Poison ---
+    socket.on('modPoison', ({ pid, amt }) => {
+        const p = gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!poisonDebounceTimers[pid]) {
+            poisonDebounceTimers[pid] = { initial: p.poison || 0, timer: null };
+        }
+        p.poison = Math.max(0, (p.poison || 0) + amt);
+        debouncedPoisonLog(pid);
+        broadcastState();
+    });
+
+    // --- Energy ---
+    socket.on('modEnergy', ({ pid, amt }) => {
+        const p = gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!energyDebounceTimers[pid]) {
+            energyDebounceTimers[pid] = { initial: p.energy || 0, timer: null };
+        }
+        p.energy = Math.max(0, (p.energy || 0) + amt);
+        debouncedEnergyLog(pid);
+        broadcastState();
+    });
+
+    // --- Monarch ---
+    socket.on('setMonarch', ({ pid }) => {
+        gameState.players.forEach(p => p.isMonarch = false);
+        const p = gameState.players.find(x => x.id === pid);
+        if (p) {
+            p.isMonarch = true;
+            addLogEntry({ type: 'monarch', pid, playerName: getPlayerName(pid) });
+        }
+        broadcastState();
+    });
+    socket.on('removeMonarch', ({ pid }) => {
+        const p = gameState.players.find(x => x.id === pid);
+        if (p) p.isMonarch = false;
+        broadcastState();
+    });
+
+    // --- Day/Night ---
+    socket.on('toggleDayNight', () => {
+        gameState.isDayTime = !gameState.isDayTime;
+        addLogEntry({ type: 'dayNight', isDayTime: gameState.isDayTime, playerName: getPlayerName(socketOwner[socket.id]) });
+        broadcastState();
+    });
+
+    // --- Commander Damage ---
+    socket.on('modCmdDamage', ({ pid, cmdUid, cmdName, cmdOwner, amt }) => {
+        const p = gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!p.cmdDamage[cmdUid]) {
+            p.cmdDamage[cmdUid] = { uid: cmdUid, name: cmdName, owner: cmdOwner, damage: 0 };
+        }
+        const key = `${pid}_${cmdUid}`;
+        if (!cmdDamageTimers[key]) {
+            cmdDamageTimers[key] = { initial: p.cmdDamage[cmdUid].damage, timer: null, cmdName };
+        }
+        p.cmdDamage[cmdUid].damage = Math.max(0, p.cmdDamage[cmdUid].damage + amt);
+        debouncedCmdDamageLog(pid, cmdUid, cmdName);
         broadcastState();
     });
 
@@ -886,24 +1089,9 @@ io.on('connection', (socket) => {
         const card = p[zone].find(c => c.uid === uid);
         if (!card) return;
 
-        // Log counter changes
+        // Log counter changes (debounced)
         if (updates.counters) {
-            const oldCounters = card.counters || [];
-            const newCounters = updates.counters;
-            if (newCounters.length > oldCounters.length) {
-                const added = newCounters[newCounters.length - 1];
-                addLogEntry({ type: 'counterAdd', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown', counter: added });
-            } else if (newCounters.length < oldCounters.length) {
-                addLogEntry({ type: 'counterRemove', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown' });
-            } else {
-                // Same length = adjustment
-                for (let i = 0; i < newCounters.length; i++) {
-                    if (newCounters[i] !== oldCounters[i]) {
-                        addLogEntry({ type: 'counterChange', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown', counter: newCounters[i] });
-                        break;
-                    }
-                }
-            }
+            debouncedCardCounterLog(pid, uid, card.name || 'Unknown');
         }
 
         // Log rotation (tap/untap)

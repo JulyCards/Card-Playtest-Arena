@@ -670,6 +670,172 @@
         #logToggleBtn:hover {
             background: #555;
         }
+
+        /* === GAME TRACKERS === */
+        .tracker-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 2px;
+        }
+
+        .tracker-pill {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 0.75em;
+            font-weight: bold;
+            color: #ccc;
+        }
+
+        .tracker-pill .tracker-icon {
+            font-size: 1em;
+        }
+
+        .tracker-pill .tracker-val {
+            min-width: 14px;
+            text-align: center;
+        }
+
+        .tracker-pill button {
+            width: 16px;
+            height: 16px;
+            padding: 0;
+            font-size: 10px;
+            line-height: 14px;
+            border-radius: 50%;
+            border: 1px solid #555;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .tracker-pill button:hover {
+            background: #666;
+        }
+
+        .tracker-pill.poison {
+            border-color: #5b5;
+            color: #6c6;
+        }
+
+        .tracker-pill.energy {
+            border-color: #da3;
+            color: #ec4;
+        }
+
+        .tracker-pill.monarch {
+            border-color: #d4a940;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .tracker-pill.monarch.active {
+            background: rgba(212, 169, 64, 0.2);
+            border-color: #ffd700;
+            box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+        }
+
+        .tracker-pill.daynight {
+            border-color: #7ab;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .tracker-pill.cmd-dmg {
+            border-color: #c55;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .tracker-pill.cmd-dmg:hover {
+            background: rgba(200, 80, 80, 0.2);
+        }
+
+        /* Commander Damage Panel */
+        .cmd-damage-panel {
+            display: none;
+            background: #1e1e1e;
+            border: 1px solid #555;
+            border-radius: 8px;
+            padding: 8px;
+            margin-top: 4px;
+        }
+
+        .cmd-damage-panel.visible {
+            display: block;
+        }
+
+        .cmd-damage-panel h4 {
+            margin: 0 0 6px;
+            color: #c55;
+            font-size: 0.85em;
+        }
+
+        .cmd-dmg-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .cmd-dmg-row:last-child {
+            border-bottom: none;
+        }
+
+        .cmd-dmg-img {
+            width: 50px;
+            height: 36px;
+            border-radius: 4px;
+            object-fit: cover;
+            object-position: center 20%;
+            border: 1px solid #555;
+            background: #222;
+        }
+
+        .cmd-dmg-name {
+            flex: 1;
+            font-size: 0.75em;
+            color: #ccc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .cmd-dmg-val {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #e55;
+            min-width: 24px;
+            text-align: center;
+        }
+
+        .cmd-dmg-btns {
+            display: flex;
+            gap: 3px;
+        }
+
+        .cmd-dmg-btns button {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            font-size: 11px;
+            border-radius: 50%;
+            border: 1px solid #555;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .cmd-dmg-btns button:hover {
+            background: #666;
+        }
     </style>
 </head>
 
@@ -795,7 +961,7 @@
 
     <script>
         const socket = io();
-        let gameState = { players: [] };
+        let gameState = { players: [], isDayTime: true };
         let myPid = null;
         let lastLifeUpdate = 0;
         let localImageCache = {};
@@ -902,6 +1068,13 @@
             inspect: '#c44',        // Red
             join: '#5cb85c',        // Green
             leave: '#c44',          // Red
+            lifeGain: '#6abf69',    // Light green
+            lifeLoss: '#b266d9',    // Purple
+            poison: '#5b5',         // Green
+            energy: '#ec4',         // Gold
+            monarch: '#d4a940',     // Amber
+            dayNight: '#7ab',       // Teal
+            cmdDamage: '#a33',      // Dark red
             default: '#aaa'         // Light grey
         };
 
@@ -921,6 +1094,13 @@
             if (entry.type === 'inspect') return LOG_COLORS.inspect;
             if (entry.type === 'playerJoin') return LOG_COLORS.join;
             if (entry.type === 'playerLeave') return LOG_COLORS.leave;
+            if (entry.type === 'lifeGain') return LOG_COLORS.lifeGain;
+            if (entry.type === 'lifeLoss') return LOG_COLORS.lifeLoss;
+            if (entry.type === 'poison') return LOG_COLORS.poison;
+            if (entry.type === 'energy') return LOG_COLORS.energy;
+            if (entry.type === 'monarch') return LOG_COLORS.monarch;
+            if (entry.type === 'dayNight') return LOG_COLORS.dayNight;
+            if (entry.type === 'cmdDamage') return LOG_COLORS.cmdDamage;
             return LOG_COLORS.default;
         }
 
@@ -978,9 +1158,26 @@
             } else if (entry.type === 'counterRemove') {
                 text = `${entry.playerName} removed a counter from ${entry.cardName}`;
             } else if (entry.type === 'counterChange') {
-                text = `${entry.playerName} changed counter on ${entry.cardName}: ${entry.counter}`;
+                text = `${entry.playerName} updated counters on ${entry.cardName}: ${entry.counters || entry.counter || ''}`;
             } else if (entry.type === 'tap') {
                 text = `${entry.playerName} tapped ${entry.cardName}`;
+            } else if (entry.type === 'lifeGain') {
+                text = `💚 ${entry.playerName} gained ${entry.amount} life (${entry.from} → ${entry.to})`;
+            } else if (entry.type === 'lifeLoss') {
+                text = `💜 ${entry.playerName} lost ${entry.amount} life (${entry.from} → ${entry.to})`;
+            } else if (entry.type === 'poison') {
+                const verb = entry.gained ? 'gained' : 'lost';
+                text = `☠ ${entry.playerName} ${verb} ${entry.amount} poison (${entry.from} → ${entry.to})`;
+            } else if (entry.type === 'energy') {
+                const verb = entry.gained ? 'gained' : 'lost';
+                text = `⚡ ${entry.playerName} ${verb} ${entry.amount} energy (${entry.from} → ${entry.to})`;
+            } else if (entry.type === 'monarch') {
+                text = `👑 ${entry.playerName} became the monarch`;
+            } else if (entry.type === 'dayNight') {
+                text = entry.isDayTime ? `☀️ ${entry.playerName} changed to Day` : `🌙 ${entry.playerName} changed to Night`;
+            } else if (entry.type === 'cmdDamage') {
+                const verb = entry.gained ? 'took' : 'removed';
+                text = `⚔ ${entry.playerName} ${verb} ${entry.amount} commander damage from ${entry.cmdName} (${entry.from} → ${entry.to})`;
             } else {
                 text = JSON.stringify(entry);
             }
@@ -1066,6 +1263,11 @@
             const lifeDisplay = (isMyView && Date.now() - lastLifeUpdate < 2000)
                 ? (document.getElementById(`life-${p.id}`)?.value || p.life) : p.life;
 
+            const monarchActive = p.isMonarch ? 'active' : '';
+            const dayNightIcon = gameState.isDayTime ? '☀️' : '🌙';
+            const poisonVal = p.poison || 0;
+            const energyVal = p.energy || 0;
+
             header.innerHTML = `
             <strong>${p.name}</strong>
             <span style="color:#888; font-size:0.8em; margin-left:5px;">🂠 ${p.hand.length}</span>
@@ -1078,6 +1280,41 @@
             <div>${p.id === myPid ? `<button onclick="emitDraw('${p.id}')">Draw</button> <button onclick="socket.emit('shuffle', {pid:'${p.id}'})">Shuffle</button>` : ''}</div>
         `;
             cont.appendChild(header);
+
+            // --- Tracker Bar ---
+            const trackerBar = document.createElement('div');
+            trackerBar.className = 'tracker-bar';
+            trackerBar.innerHTML = `
+                <div class="tracker-pill poison">
+                    <span class="tracker-icon">☠</span>
+                    <span class="tracker-val">${poisonVal}</span>
+                    <button onclick="socket.emit('modPoison',{pid:'${p.id}',amt:-1})">-</button>
+                    <button onclick="socket.emit('modPoison',{pid:'${p.id}',amt:1})">+</button>
+                </div>
+                <div class="tracker-pill energy">
+                    <span class="tracker-icon">⚡</span>
+                    <span class="tracker-val">${energyVal}</span>
+                    <button onclick="socket.emit('modEnergy',{pid:'${p.id}',amt:-1})">-</button>
+                    <button onclick="socket.emit('modEnergy',{pid:'${p.id}',amt:1})">+</button>
+                </div>
+                <div class="tracker-pill monarch ${monarchActive}" onclick="toggleMonarch('${p.id}')" title="Toggle Monarch">
+                    <span class="tracker-icon">👑</span>
+                </div>
+                <div class="tracker-pill daynight" onclick="socket.emit('toggleDayNight')" title="Toggle Day/Night">
+                    <span class="tracker-icon">${dayNightIcon}</span>
+                </div>
+                <div class="tracker-pill cmd-dmg" onclick="toggleCmdDamagePanel('${containerId}')" title="Commander Damage">
+                    <span class="tracker-icon">⚔</span>
+                </div>
+            `;
+            cont.appendChild(trackerBar);
+
+            // --- Commander Damage Panel (collapsible) ---
+            const cmdPanel = document.createElement('div');
+            cmdPanel.className = 'cmd-damage-panel';
+            cmdPanel.id = `cmd-panel-${containerId}`;
+            renderCmdDamagePanel(cmdPanel, p);
+            cont.appendChild(cmdPanel);
 
             const utilRow = document.createElement('div');
             utilRow.className = 'utility-region';
@@ -1095,6 +1332,74 @@
 
             p.battlefield.forEach(c => bf.appendChild(createCard(c, p.id, 'battlefield')));
             cont.appendChild(bf);
+        }
+
+        // --- Tracker Helpers ---
+        function toggleMonarch(pid) {
+            const p = gameState.players.find(x => x.id === pid);
+            if (p && p.isMonarch) {
+                socket.emit('removeMonarch', { pid });
+            } else {
+                socket.emit('setMonarch', { pid });
+            }
+        }
+
+        // Track which cmd panels are open so they survive re-render
+        const openCmdPanels = new Set();
+
+        function toggleCmdDamagePanel(containerId) {
+            const panelId = `cmd-panel-${containerId}`;
+            if (openCmdPanels.has(panelId)) {
+                openCmdPanels.delete(panelId);
+            } else {
+                openCmdPanels.add(panelId);
+            }
+            const el = document.getElementById(panelId);
+            if (el) el.classList.toggle('visible');
+        }
+
+        function getAllCommanders() {
+            // Collect all commanders from all players
+            const cmds = [];
+            for (const p of gameState.players) {
+                for (const c of (p.command || [])) {
+                    cmds.push({ uid: c.uid, name: c.name || 'Commander', owner: p.id, ownerName: p.name, _cacheId: c._cacheId || c.uid });
+                }
+            }
+            return cmds;
+        }
+
+        function renderCmdDamagePanel(panel, player) {
+            const cmds = getAllCommanders();
+            if (cmds.length === 0) {
+                panel.innerHTML = '<h4>⚔ Commander Damage</h4><div style="font-size:0.75em;color:#888;">No commanders in play</div>';
+                return;
+            }
+            let html = '<h4>⚔ Commander Damage</h4>';
+            for (const cmd of cmds) {
+                const dmg = (player.cmdDamage && player.cmdDamage[cmd.uid]) ? player.cmdDamage[cmd.uid].damage : 0;
+                const imgData = localImageCache[cmd._cacheId];
+                const imgSrc = imgData ? imgData.front : '';
+                html += `<div class="cmd-dmg-row">`;
+                if (imgSrc) {
+                    html += `<img class="cmd-dmg-img" src="${imgSrc}" alt="${cmd.name}">`;
+                } else {
+                    html += `<div class="cmd-dmg-img" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">?</div>`;
+                }
+                html += `<span class="cmd-dmg-name">${cmd.name}<br><span style="font-size:0.85em;color:#888;">(${cmd.ownerName})</span></span>`;
+                html += `<span class="cmd-dmg-val">${dmg}</span>`;
+                html += `<div class="cmd-dmg-btns">`;
+                html += `<button onclick="modCmdDmg('${player.id}','${cmd.uid}','${cmd.name.replace(/'/g, "\\'")}','${cmd.owner}',-1)">-</button>`;
+                html += `<button onclick="modCmdDmg('${player.id}','${cmd.uid}','${cmd.name.replace(/'/g, "\\'")}','${cmd.owner}',1)">+</button>`;
+                html += `</div></div>`;
+            }
+            panel.innerHTML = html;
+            // Restore open state
+            if (openCmdPanels.has(panel.id)) panel.classList.add('visible');
+        }
+
+        function modCmdDmg(pid, cmdUid, cmdName, cmdOwner, amt) {
+            socket.emit('modCmdDamage', { pid, cmdUid, cmdName, cmdOwner, amt });
         }
 
         function createZoneUI(pid, zone, title, cards) {
