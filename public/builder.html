@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Deck Builder — MTG Commander Arena</title>
     <link rel="stylesheet" href="/css/shared.css">
+    <script src="/js/card-meta.js"></script>
     <style>
         body {
             display: flex;
@@ -505,6 +506,108 @@
         #metaEditModal .meta-btns button:hover {
             opacity: 0.85;
         }
+
+        /* === Scryfall Search === */
+        .scryfall-search-wrap {
+            position: relative;
+        }
+
+        #scryfallResults {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #1e1e1e;
+            border: 1px solid #555;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 50;
+            display: none;
+        }
+
+        #scryfallResults .sr-item {
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 0.85em;
+            border-bottom: 1px solid #333;
+        }
+
+        #scryfallResults .sr-item:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        /* === Prints Modal === */
+        #printsModal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.88);
+            z-index: 999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .prints-box {
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 10px;
+            padding: 20px;
+            max-width: 900px;
+            width: 100%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .prints-box h3 {
+            margin: 0 0 10px;
+            color: var(--accent);
+        }
+
+        .prints-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 12px;
+            overflow-y: auto;
+            flex: 1;
+            padding: 5px;
+        }
+
+        .print-card {
+            cursor: pointer;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: 0.15s;
+            background: #111;
+        }
+
+        .print-card:hover {
+            border-color: var(--accent);
+            transform: scale(1.03);
+        }
+
+        .print-card img {
+            width: 100%;
+            display: block;
+            border-radius: 6px 6px 0 0;
+        }
+
+        .print-card .print-info {
+            padding: 5px 8px;
+            font-size: 0.7em;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        .prints-close {
+            margin-top: 10px;
+            align-self: flex-end;
+        }
     </style>
 </head>
 
@@ -540,6 +643,20 @@
             <button class="btn-block" onclick="document.getElementById('loadJsonInput').click()"
                 style="margin-top:5px;">📂 Load Existing Deck JSON</button>
             <input type="file" id="loadJsonInput" accept=".json" style="display:none" onchange="loadDeckJSON()">
+
+            <div style="border-top:1px dashed #444; margin-top:5px; padding-top:5px;">
+                <h3>Scryfall Import</h3>
+                <label style="font-size:0.8em; color:var(--text-muted);">Target Zone</label>
+                <select id="scryfallZone">
+                    <option value="library">Library</option>
+                    <option value="command">Command</option>
+                    <option value="tokens">Tokens</option>
+                </select>
+                <div class="scryfall-search-wrap">
+                    <input type="text" id="scryfallSearch" placeholder="Search for a card..." autocomplete="off">
+                    <div id="scryfallResults"></div>
+                </div>
+            </div>
 
             <h3>2. Manual Add</h3>
             <select id="manZone">
@@ -591,6 +708,16 @@
                     <option value="tokens">Tokens</option>
                 </select>
                 <input type="file" id="bulkInput" multiple accept="image/*" onchange="bulkAdd()">
+            </div>
+
+            <div style="border-top:1px dashed #444; margin-top:5px; padding-top:5px;">
+                <h3>Metadata Import</h3>
+                <p style="font-size:0.75em; color:var(--text-muted); margin:0 0 5px;">Import card data from MTGSE XML or
+                    auto-fill from Scryfall. Import images first, then apply metadata.</p>
+                <input type="file" id="xmlInput" accept=".xml">
+                <button class="btn-block" onclick="importMTGSEXml()" style="margin-top:4px;">📄 Apply MTGSE XML</button>
+                <button class="btn-block" onclick="autoFillScryfall()" style="margin-top:4px;">🔍 Auto-fill from
+                    Scryfall</button>
             </div>
 
             <h3>3. Export</h3>
@@ -1131,6 +1258,78 @@
             renderDupCurrent();
         }
 
+        // === SINGLE-CARD DUPLICATE CHECK ===
+        // Returns a promise: resolves with 'none' (no dup), 'keep', 'both', or 'replace'
+        let singleDupResolve = null;
+
+        function checkSingleCardDuplicate(zone, incomingCard) {
+            const nameLower = (incomingCard.name || '').toLowerCase();
+            const existingIdx = (deck[zone] || []).findIndex(e => (e.name || '').toLowerCase() === nameLower);
+
+            if (existingIdx === -1) return Promise.resolve('none');
+
+            // Show the dup modal for this single card
+            const dup = { zone, existingIdx, existing: deck[zone][existingIdx], incoming: incomingCard };
+            dupQueue = [{ zone, items: [dup] }];
+            dupZoneIdx = 0;
+            dupItemIdx = 0;
+            document.getElementById('dupApplyAll').checked = false;
+
+            return new Promise(resolve => {
+                singleDupResolve = resolve;
+                renderDupCurrent();
+                document.getElementById('dupModal').style.display = 'flex';
+            });
+        }
+
+        // Patch renderDupCurrent to call singleDupResolve when done
+        const _origRenderDupCurrent = renderDupCurrent;
+        renderDupCurrent = function () {
+            if (dupZoneIdx >= dupQueue.length) {
+                document.getElementById('dupModal').style.display = 'none';
+                if (singleDupResolve) {
+                    // Single-card flow: resolve the promise, skip syncDeck/render (caller does it)
+                    const r = singleDupResolve;
+                    singleDupResolve = null;
+                    r('done');
+                    return;
+                }
+                // Batch flow (moxfield import): original behavior
+                cleanTokenZone();
+                syncDeck();
+                render();
+                return;
+            }
+            // Delegate to the original rendering
+            const group = dupQueue[dupZoneIdx];
+            const d = group.items[dupItemIdx];
+            const container = document.getElementById('dupPairContainer');
+            const zonePretty = { command: 'Command Zone', library: 'Library', tokens: 'Tokens' };
+            const totalInZone = group.items.length;
+            document.getElementById('dupCounter').textContent = `${zonePretty[group.zone] || group.zone} \u2014 Duplicate ${dupItemIdx + 1} of ${totalInZone}`;
+            container.innerHTML = `
+                <div class="dup-zone-label">${zonePretty[group.zone] || group.zone}</div>
+                <div class="dup-pair">
+                    <div style="text-align:center">
+                        <img src="${(d.existing.is_flipped && d.existing.back) ? d.existing.back : d.existing.front}" alt="Current">
+                        <div class="dup-label">Current</div>
+                    </div>
+                    <div style="text-align:center">
+                        <img src="${(d.incoming.is_flipped && d.incoming.back) ? d.incoming.back : d.incoming.front}" alt="Incoming">
+                        <div class="dup-label">Incoming</div>
+                    </div>
+                    <div class="dup-info">
+                        <div class="card-name">${d.incoming.name}</div>
+                        <div class="dup-btns">
+                            <button onclick="resolveDup('keep')">Keep Current</button>
+                            <button onclick="resolveDup('both')">Import Both</button>
+                            <button class="replace" onclick="resolveDup('replace')">Replace Art</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
         // === JSON LOAD ===
         function loadDeckJSON() {
             const file = document.getElementById('loadJsonInput').files[0];
@@ -1606,6 +1805,257 @@
         }
 
         function showLoading(show) { document.getElementById('loadingScreen').style.display = show ? 'flex' : 'none'; }
+
+        // === MTGSE XML IMPORT ===
+        async function importMTGSEXml() {
+            const fileInput = document.getElementById('xmlInput');
+            const file = fileInput.files[0];
+            if (!file) return alert('Select an MTGSE XML file first.');
+
+            const xmlText = await file.text();
+            const { setName, cards: metaCards } = parseMTGSEXml(xmlText);
+
+            if (metaCards.length === 0) return alert('No cards found in the XML file.');
+
+            const { matched, unmatched } = matchMetaToDeck(metaCards, deck);
+
+            if (matched.length === 0) {
+                alert(`No name matches found.\n\n${unmatched.length} XML cards had no matching deck card.\nMake sure card names in the deck match the XML names.`);
+                return;
+            }
+
+            applyMetaToDeck(deck, matched);
+            syncDeck();
+            render();
+
+            let msg = `\u2705 Applied metadata to ${matched.length} card(s)`;
+            if (setName) msg += ` from set "${setName}"`;
+            if (unmatched.length > 0) msg += `\n\n${unmatched.length} XML card(s) had no match:\n${unmatched.slice(0, 10).map(c => '  • ' + c.name).join('\n')}`;
+            if (unmatched.length > 10) msg += `\n  ... and ${unmatched.length - 10} more`;
+            alert(msg);
+            fileInput.value = '';
+        }
+
+        // === SCRYFALL AUTO-FILL ===
+        async function autoFillScryfall() {
+            // Find cards without metadata
+            const targets = [];
+            ['command', 'library', 'tokens'].forEach(zone => {
+                (deck[zone] || []).forEach((card, idx) => {
+                    const m = card.meta || {};
+                    if (!m.type_line && !m.mana_cost && !m.oracle_text) {
+                        targets.push({ zone, idx, name: card.name });
+                    }
+                });
+            });
+
+            if (targets.length === 0) return alert('All cards already have metadata.');
+            if (!confirm(`Look up ${targets.length} card(s) on Scryfall?\nThis may take a moment.`)) return;
+
+            showLoading(true);
+            let found = 0;
+
+            for (let i = 0; i < targets.length; i++) {
+                const pct = Math.floor(((i + 1) / targets.length) * 100);
+                document.getElementById('progressBar').style.width = pct + '%';
+                document.getElementById('percentMsg').innerText = pct + '%';
+                document.getElementById('currentCardMsg').innerText = `Looking up: ${targets[i].name}...`;
+
+                const meta = await scryfallLookup(targets[i].name);
+                if (meta) {
+                    const card = deck[targets[i].zone][targets[i].idx];
+                    if (!card.meta) card.meta = {};
+                    Object.assign(card.meta, meta);
+                    card.name = meta.name; // Use Scryfall's canonical name
+                    card._modified = Date.now();
+                    found++;
+                }
+
+                // Scryfall rate limit: ~100ms between requests
+                if (i < targets.length - 1) await new Promise(r => setTimeout(r, 120));
+            }
+
+            syncDeck();
+            render();
+            showLoading(false);
+            alert(`\u2705 Found ${found} of ${targets.length} cards on Scryfall.\n${targets.length - found} not found (custom or misspelled).`);
+        }
+
+        // === SCRYFALL CARD SEARCH + IMPORT ===
+        let searchTimeout = null;
+        const searchInput = document.getElementById('scryfallSearch');
+        const resultsDiv = document.getElementById('scryfallResults');
+
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            const q = searchInput.value.trim();
+            if (q.length < 2) { resultsDiv.style.display = 'none'; return; }
+            searchTimeout = setTimeout(async () => {
+                const res = await fetch(`/api/scryfall/search?q=${encodeURIComponent(q)}`);
+                const names = await res.json();
+                resultsDiv.innerHTML = '';
+                if (names.length === 0) { resultsDiv.style.display = 'none'; return; }
+                names.slice(0, 15).forEach(name => {
+                    const div = document.createElement('div');
+                    div.className = 'sr-item';
+                    div.textContent = name;
+                    div.onclick = () => selectScryfallCard(name);
+                    resultsDiv.appendChild(div);
+                });
+                resultsDiv.style.display = 'block';
+            }, 250);
+        });
+
+        // Hide dropdown on click outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.scryfall-search-wrap')) resultsDiv.style.display = 'none';
+        });
+
+        async function selectScryfallCard(name) {
+            resultsDiv.style.display = 'none';
+            searchInput.value = name;
+
+            // Fetch all printings
+            showLoading(true);
+            document.getElementById('currentCardMsg').innerText = `Loading prints for ${name}...`;
+            document.getElementById('progressBar').style.width = '50%';
+            document.getElementById('percentMsg').innerText = '';
+
+            try {
+                const res = await fetch(`/api/scryfall/prints?name=${encodeURIComponent(name)}`);
+                const data = await res.json();
+                showLoading(false);
+
+                if (!data.prints || data.prints.length === 0) {
+                    alert('No printings found for this card.');
+                    return;
+                }
+
+                showPrintsModal(data.prints);
+            } catch (e) {
+                showLoading(false);
+                alert('Error loading prints: ' + e.message);
+            }
+        }
+
+        function showPrintsModal(prints) {
+            const modal = document.getElementById('printsModal');
+            const grid = document.getElementById('printsGrid');
+            document.getElementById('printsTitle').textContent = `${prints[0].name} — ${prints.length} printing(s)`;
+            grid.innerHTML = '';
+
+            prints.forEach(p => {
+                if (!p.image_url) return;
+                const card = document.createElement('div');
+                card.className = 'print-card';
+                card.innerHTML = `<img src="${p.image_url}" alt="${p.set_name}" loading="lazy">
+                    <div class="print-info">
+                        <b>${p.set_name}</b> (${p.set.toUpperCase()})<br>
+                        #${p.collector_number} · ${p.rarity} · ${p.artist}
+                    </div>`;
+                card.onclick = () => importScryfallPrint(p);
+                grid.appendChild(card);
+            });
+
+            modal.style.display = 'flex';
+        }
+
+        function closePrintsModal() {
+            document.getElementById('printsModal').style.display = 'none';
+        }
+
+        async function importScryfallPrint(print) {
+            closePrintsModal();
+            showLoading(true);
+            document.getElementById('currentCardMsg').innerText = `Downloading ${print.name}...`;
+            document.getElementById('progressBar').style.width = '30%';
+            document.getElementById('percentMsg').innerText = '';
+
+            try {
+                // Download front image
+                const frontRes = await fetch(`/api/scryfall/image?url=${encodeURIComponent(print.image_url)}`);
+                const frontData = await frontRes.json();
+                const front = frontData.image;
+
+                document.getElementById('progressBar').style.width = '60%';
+
+                // Download back image if DFC
+                let back = null;
+                if (print.is_dfc && print.back_image_url) {
+                    const backRes = await fetch(`/api/scryfall/image?url=${encodeURIComponent(print.back_image_url)}`);
+                    const backData = await backRes.json();
+                    back = backData.image;
+                }
+
+                showLoading(false);
+
+                const zone = document.getElementById('scryfallZone').value;
+
+                // Build temporary card for duplicate check
+                const tempCard = {
+                    name: print.name, front, back,
+                    meta: {
+                        mana_cost: print.mana_cost, cmc: print.cmc,
+                        type_line: print.type_line, oracle_text: print.oracle_text,
+                        colors: print.colors, color_identity: print.color_identity,
+                        keywords: print.keywords, power: print.power, toughness: print.toughness,
+                        rarity: print.rarity, set_name: print.set_name
+                    }
+                };
+
+                const dupResult = await checkSingleCardDuplicate(zone, tempCard);
+                if (dupResult === 'done') {
+                    syncDeck();
+                    render();
+                    searchInput.value = '';
+                    return;
+                }
+
+                // No duplicate — add normally
+                showLoading(true);
+                document.getElementById('currentCardMsg').innerText = `Saving ${print.name}...`;
+                document.getElementById('progressBar').style.width = '80%';
+
+                const res = await fetch('/api/builder/add-card', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        zone,
+                        name: print.name,
+                        front,
+                        back,
+                        oracle_text: print.oracle_text,
+                        mana_cost: print.mana_cost,
+                        cmc: print.cmc,
+                        type_line: print.type_line,
+                        power: print.power,
+                        toughness: print.toughness,
+                        colors: print.colors,
+                        color_identity: print.color_identity,
+                        keywords: print.keywords,
+                        is_dfc: print.is_dfc
+                    })
+                });
+                const result = await res.json();
+                deck = result.deck;
+
+                const addedZone = deck[zone] || [];
+                if (addedZone.length > 0) {
+                    const card = addedZone[addedZone.length - 1];
+                    if (!card.meta) card.meta = {};
+                    card.meta.rarity = print.rarity;
+                    card.meta.set_name = print.set_name;
+                    card._modified = Date.now();
+                }
+
+                render();
+                showLoading(false);
+                searchInput.value = '';
+            } catch (e) {
+                showLoading(false);
+                alert('Error importing card: ' + e.message);
+            }
+        }
     </script>
 
     <!-- Magnify Modal -->
@@ -1657,6 +2107,16 @@
                 <button onclick="cancelMetaEdit()">Cancel</button>
                 <button class="save" onclick="saveMetaEdit()">💾 Save</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Scryfall Prints Modal -->
+    <div id="printsModal">
+        <div class="prints-box">
+            <h3 id="printsTitle">Select a Printing</h3>
+            <div class="prints-grid" id="printsGrid"></div>
+            <button class="prints-close btn-block" onclick="closePrintsModal()" style="margin-top:10px;">✕
+                Cancel</button>
         </div>
     </div>
 </body>

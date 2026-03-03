@@ -396,7 +396,123 @@ app.post('/api/builder/optimize-image', async (req, res) => {
     }
 });
 
-// Download all card images as ZIP
+// Scryfall proxy — bypass CORS for card lookup
+app.get('/api/scryfall/named', async (req, res) => {
+    const name = req.query.name;
+    if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+    try {
+        const url = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return res.status(404).json({ error: 'Card not found' });
+        const card = await resp.json();
+        // Return simplified metadata
+        res.json({
+            name: card.name,
+            mana_cost: card.mana_cost || null,
+            cmc: card.cmc ?? null,
+            type_line: card.type_line || null,
+            oracle_text: card.oracle_text || null,
+            colors: card.colors || [],
+            color_identity: card.color_identity || [],
+            keywords: card.keywords || [],
+            power: card.power || null,
+            toughness: card.toughness || null,
+            rarity: card.rarity || null,
+            set_name: card.set_name || null
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Scryfall autocomplete search
+app.get('/api/scryfall/search', async (req, res) => {
+    const q = req.query.q;
+    if (!q) return res.json([]);
+    try {
+        const resp = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) return res.json([]);
+        const data = await resp.json();
+        res.json(data.data || []);
+    } catch {
+        res.json([]);
+    }
+});
+
+// Scryfall prints — all printings of a card with images
+app.get('/api/scryfall/prints', async (req, res) => {
+    const name = req.query.name;
+    if (!name) return res.status(400).json({ error: 'Missing name' });
+    try {
+        // First get the oracle ID via exact name search
+        const namedResp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+        if (!namedResp.ok) return res.status(404).json({ error: 'Card not found' });
+        const namedCard = await namedResp.json();
+        const oracleId = namedCard.oracle_id;
+
+        // Then get all prints
+        const printsResp = await fetch(`https://api.scryfall.com/cards/search?order=released&q=oracleid%3A${oracleId}&unique=prints`);
+        if (!printsResp.ok) return res.json({ prints: [buildPrint(namedCard)] });
+        const printsData = await printsResp.json();
+
+        const prints = (printsData.data || []).map(buildPrint);
+        res.json({ prints });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+function buildPrint(card) {
+    let image_url = null;
+    if (card.image_uris) {
+        image_url = card.image_uris.png || card.image_uris.large || card.image_uris.normal;
+    } else if (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris) {
+        image_url = card.card_faces[0].image_uris.png || card.card_faces[0].image_uris.large || card.card_faces[0].image_uris.normal;
+    }
+    let back_image_url = null;
+    if (card.card_faces && card.card_faces[1] && card.card_faces[1].image_uris) {
+        back_image_url = card.card_faces[1].image_uris.png || card.card_faces[1].image_uris.large || card.card_faces[1].image_uris.normal;
+    }
+    return {
+        id: card.id,
+        name: card.name,
+        set_name: card.set_name || '',
+        set: card.set || '',
+        collector_number: card.collector_number || '',
+        rarity: card.rarity || '',
+        artist: card.artist || '',
+        image_url,
+        back_image_url,
+        mana_cost: card.mana_cost || (card.card_faces ? card.card_faces[0].mana_cost : null) || null,
+        cmc: card.cmc ?? null,
+        type_line: card.type_line || null,
+        oracle_text: card.oracle_text || (card.card_faces ? card.card_faces[0].oracle_text : null) || null,
+        colors: card.colors || (card.card_faces ? card.card_faces[0].colors : null) || [],
+        color_identity: card.color_identity || [],
+        keywords: card.keywords || [],
+        power: card.power || (card.card_faces ? card.card_faces[0].power : null) || null,
+        toughness: card.toughness || (card.card_faces ? card.card_faces[0].toughness : null) || null,
+        is_dfc: !!(card.card_faces && card.card_faces.length > 1 && card.card_faces[1].image_uris)
+    };
+}
+
+// Proxy Scryfall card image → base64
+app.get('/api/scryfall/image', async (req, res) => {
+    const url = req.query.url;
+    if (!url || !url.startsWith('https://cards.scryfall.io/')) {
+        return res.status(400).json({ error: 'Invalid image URL' });
+    }
+    try {
+        const imgResp = await fetch(url);
+        if (!imgResp.ok) return res.status(404).json({ error: 'Image not found' });
+        const buffer = Buffer.from(await imgResp.arrayBuffer());
+        const contentType = imgResp.headers.get('content-type') || 'image/png';
+        const b64 = `data:${contentType};base64,${buffer.toString('base64')}`;
+        res.json({ image: b64 });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 app.get('/api/builder/download', (req, res) => {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${(activeDeck.deckName || 'Deck').replace(/\s+/g, '_')}_cards.zip"`);
