@@ -1230,7 +1230,11 @@
                 } else if (action === 'replace') {
                     deck[d.zone][d.existingIdx].front = d.incoming.front;
                     deck[d.zone][d.existingIdx].back = d.incoming.back;
-                    deck[d.zone][d.existingIdx].meta = d.incoming.meta;
+                    // Local imports (from user's machine) preserve existing metadata;
+                    // Scryfall/Moxfield imports carry richer metadata, so use incoming
+                    if (!d.incoming._localImport) {
+                        deck[d.zone][d.existingIdx].meta = d.incoming.meta;
+                    }
                     deck[d.zone][d.existingIdx]._modified = now;
                 }
             };
@@ -1404,6 +1408,33 @@
             const kwField = document.getElementById('manKeywords').value;
             const keywords = kwField ? kwField.split(',').map(k => k.trim()).filter(Boolean) : [];
 
+            // Build temporary card for duplicate check (before sending to server)
+            const tempCard = {
+                name, front: frontB64, back: backB64,
+                _localImport: true,
+                meta: {
+                    oracle_text: document.getElementById('manOracle').value || null,
+                    mana_cost: manaCost, cmc,
+                    type_line: document.getElementById('manTypeLine').value || null,
+                    colors, color_identity, keywords,
+                    power: document.getElementById('manPower').value || null,
+                    toughness: document.getElementById('manToughness').value || null,
+                    rarity: null, set_name: null,
+                    is_dfc: document.getElementById('manDFC').checked
+                }
+            };
+
+            const dupResult = await checkSingleCardDuplicate(zone, tempCard);
+            if (dupResult === 'done') {
+                // Duplicate was resolved via the modal (keep/replace/both handled by resolveDup)
+                syncDeck();
+                render();
+                ['manFront', 'manBack', 'manName', 'manOracle', 'manManaCost', 'manManaValue', 'manTypeLine', 'manPower', 'manToughness', 'manColors', 'manColorId', 'manKeywords'].forEach(id => document.getElementById(id).value = '');
+                document.getElementById('manDFC').checked = false;
+                return;
+            }
+
+            // No duplicate — add normally via server (optimizes images)
             const payload = {
                 zone, name, front: frontB64, back: backB64,
                 oracle_text: document.getElementById('manOracle').value || null,
@@ -1445,6 +1476,22 @@
                 const b64 = await toBase64(f);
                 const name = f.name.replace(/\.[^/.]+$/, "");
 
+                // Build temporary card for duplicate check
+                const tempCard = { name, front: b64, back: null, _localImport: true, meta: null };
+
+                // Pause loading overlay so dup modal can show
+                showLoading(false);
+                const dupResult = await checkSingleCardDuplicate(zone, tempCard);
+                if (dupResult === 'done') {
+                    // Duplicate resolved via modal — continue to next file
+                    syncDeck();
+                    render();
+                    showLoading(true);
+                    continue;
+                }
+                showLoading(true);
+
+                // No duplicate — add normally
                 await fetch('/api/builder/add-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: zone, name, front: b64 }) });
             }
 
