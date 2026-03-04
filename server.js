@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
@@ -39,7 +39,7 @@ const IMAGE_HEADERS = {
 
 // --- Builder State ---
 let currentJob = { active: false, progress: 0, total: 0, message: "", result: null, error: null, missing: [], done: false };
-let activeDeck = { deckName: "New Deck", command: [], library: [], tokens: [] };
+let activeDeck = { deckName: "New Deck", cardBack: null, command: [], library: [], tokens: [] };
 
 // --- Utility: Sleep ---
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -87,7 +87,7 @@ async function safeFetch(url, isImage = false) {
     return null;
 }
 
-// --- Safe Download (image URL → optimized base64) ---
+// --- Safe Download (image URL â†’ optimized base64) ---
 async function safeDownload(url) {
     const resp = await safeFetch(url, true);
     if (!resp) return null;
@@ -180,7 +180,7 @@ async function processSingleCard(item, isToken = false) {
                 meta.back_type_line = face1.type_line || null;
             }
 
-            // Handle images — DFCs have separate images per face, others use a shared image
+            // Handle images â€” DFCs have separate images per face, others use a shared image
             if (scryfallData.card_faces && !scryfallData.image_uris) {
                 // True DFC (separate images per face)
                 meta.is_dfc = true;
@@ -235,7 +235,7 @@ async function runImportFromCards(deckName, commanders, library, tokens) {
 
         currentJob.total = commanders.length + library.length + tokens.length;
 
-        // Build only the imported cards — client will merge with existing deck
+        // Build only the imported cards â€” client will merge with existing deck
         const imported = { deckName: deckName || "Imported", command: [], library: [], tokens: [] };
 
         // Track discovered token Scryfall IDs from all_parts (for auto-discovery)
@@ -314,7 +314,7 @@ app.post('/api/builder/import-cards', (req, res) => {
     res.json({ status: "started" });
 });
 
-// Moxfield proxy — uses curl.exe to bypass Cloudflare TLS fingerprinting
+// Moxfield proxy â€” uses curl.exe to bypass Cloudflare TLS fingerprinting
 const { execFile } = require('child_process');
 
 function curlFetchMoxfield(url) {
@@ -363,7 +363,7 @@ app.get('/api/builder/moxfield-proxy', async (req, res) => {
     }
 });
 
-// Archidekt proxy — fetch deck JSON server-side to bypass CORS
+// Archidekt proxy â€” fetch deck JSON server-side to bypass CORS
 app.get('/api/builder/archidekt-proxy', async (req, res) => {
     const deckId = req.query.id;
     if (!deckId || !/^\d+$/.test(deckId)) return res.status(400).json({ error: 'Missing or invalid deck ID' });
@@ -459,7 +459,7 @@ app.post('/api/builder/optimize-image', async (req, res) => {
     }
 });
 
-// Scryfall proxy — bypass CORS for card lookup
+// Scryfall proxy â€” bypass CORS for card lookup
 app.get('/api/scryfall/named', async (req, res) => {
     const name = req.query.name;
     if (!name) return res.status(400).json({ error: 'Missing name parameter' });
@@ -502,7 +502,7 @@ app.get('/api/scryfall/search', async (req, res) => {
     }
 });
 
-// Scryfall prints — all printings of a card with images
+// Scryfall prints â€” all printings of a card with images
 app.get('/api/scryfall/prints', async (req, res) => {
     const name = req.query.name;
     if (!name) return res.status(400).json({ error: 'Missing name' });
@@ -559,7 +559,7 @@ function buildPrint(card) {
     };
 }
 
-// Proxy Scryfall card image → base64
+// Proxy Scryfall card image â†’ base64
 app.get('/api/scryfall/image', async (req, res) => {
     const url = req.query.url;
     if (!url || !url.startsWith('https://cards.scryfall.io/')) {
@@ -615,19 +615,68 @@ app.get('/', (req, res) => {
 
 
 // ============================================================================
-//  PART 2: ARENA GAME SERVER (Original, unchanged)
+//  PART 2: ARENA GAME SERVER (Room-Based)
 // ============================================================================
 
 // --- CONSTANTS FOR GUEST NAMES ---
 const ADJECTIVES = ["Abrasive", "Abrupt", "Acidic", "Active", "Aggressive", "Agile", "Alert", "Ancient", "Angry", "Animated", "Annoying", "Anxious", "Arrogant", "Ashamed", "Attractive", "Average", "Awful", "Beautiful", "Celestial", "Best", "Better", "Bewildered", "Big", "Bitter", "Black", "Bland", "Blue", "Boiling", "Bold", "Boring", "Brave", "Bright", "Broad", "Broken", "Bumpy", "Busy", "Calm", "Careful", "Charming", "Cheap", "Cheerful", "Chubby", "Clean", "Clever", "Clumsy", "Cold", "Colorful", "Colossal", "Combative", "Common", "Complete", "Confused", "Cooperative", "Courageous", "Crazy", "Creepy", "Cruel", "Curious", "Cute", "Dangerous", "Dark", "Dead", "Deafening", "Deep", "Defeated", "Delicate", "Delicious", "Determined", "Different", "Difficult", "Dirty", "Disgusting", "Distinct", "Disturbed", "Dizzy", "Drab", "Dry", "Dull", "Dusty", "Eager", "Early", "Easy", "Elegant", "Embarrassed", "Empty", "Enchanted", "Energetic", "Enormous", "Enthusiastic", "Envious", "Evil", "Excited", "Expensive", "Faint", "Fair", "Faithful", "Famous", "Fancy", "Fantastic", "Fast", "Fat", "Fearful", "Fearless", "Ferocious", "Filthy", "Fine", "Flat", "Fluffy", "Foolish", "Fragile", "Frail", "Frantic", "Free", "Fresh", "Friendly", "Frightened", "Funny", "Fuzzy", "Gentle", "Giant", "Gifted", "Gigantic", "Glamorous", "Gleaming", "Glorious", "Good", "Gorgeous", "Graceful", "Great", "Greedy", "Green", "Grieving", "Grim", "Grotesque", "Grumpy", "Handsome", "Happy", "Hard", "Harsh", "Healthy", "Heavy", "Helpful", "Helpless", "High", "Hilarious", "Hollow", "Homeless", "Honest", "Horrible", "Hot", "Huge", "Hungry", "Hurt", "Icy", "Ideal", "Ill", "Immense", "Important", "Impossible", "Innocent", "Inquisitive", "Insane", "Intelligent", "Intense", "Interesting", "Irritating", "Itchy", "Jealous", "Jittery", "Jolly", "Joyous", "Juicy", "Kind", "Large", "Late", "Lazy", "Light", "Little", "Lonely", "Long", "Loose", "Loud", "Lovely", "Lucky", "Mad", "Magnificent", "Massive", "Mean", "Melodic", "Melted", "Messy", "Mighty", "Miniature", "Modern", "Motionless", "Muddy", "Mushy", "Mysterious", "Nasty", "Naughty", "Nervous", "New", "Nice", "Noisy", "Nutty", "Obedient", "Obnoxious", "Odd", "Old", "Open", "Orange", "Ordinary", "Outrageous", "Outstanding", "Pale", "Panicky", "Perfect", "Plain", "Pleasant", "Poised", "Poor", "Powerful", "Precious", "Prickly", "Proud", "Purple", "Putrid", "Quaint", "Quick", "Quiet", "Rapid", "Rare", "Real", "Red", "Rich", "Right", "Ripe", "Robust", "Rotten", "Rough", "Round", "Royal", "Rude", "Sad", "Safe", "Salty", "Scary", "Secret", "Selfish", "Serious", "Sharp", "Shiny", "Shocking", "Short", "Shy", "Silly", "Simple", "Skinny", "Sleepy", "Slim", "Slow", "Small", "Smart", "Smooth", "Soft", "Solid", "Sore", "Sour", "Sparkling", "Spicy", "Splendid", "Spotless", "Square", "Steady", "Steep", "Sticky", "Stormy", "Straight", "Strange", "Strong", "Stupid", "Successful", "Sweet", "Swift", "Tall", "Tame", "Tasty", "Tender", "Tense", "Terrible", "Thick", "Thin", "Thirsty", "Thoughtful", "Tight", "Tiny", "Tired", "Tough", "Troubled", "Ugly", "Uninterested", "Unsightly", "Unusual", "Upset", "Uptight", "Vast", "Victorious", "Vivacious", "Wandering", "Warm", "Weak", "Wealthy", "Weary", "Wet", "Whispering", "White", "Wicked", "Wide", "Wild", "Wise", "Witty", "Wonderful", "Worried", "Wrong", "Yellow", "Young", "Zany", "Zealous"];
 const NOUNS = ["Acacia", "Acanthus", "Acorn Squash", "Agapanthus", "Alfalfa", "Allium", "Almond", "Aloe Vera", "Amaranth", "Amaryllis", "Anemone", "Angelica", "Anise", "Apple", "Apricot", "Artichoke", "Arugula", "Asparagus", "Aster", "Aubergine", "Avocado", "Azalea", "Bamboo", "Banana", "Basil", "Bean", "Beet", "Begonia", "Bell Pepper", "Bergamot", "Bilberry", "Blackberry", "Bluebell", "Blueberry", "Bok Choy", "Broccoli", "Buttercup", "Cabbage", "Cactus", "Calendula", "Camellia", "Cantaloupe", "Carnation", "Carrot", "Cauliflower", "Celery", "Chamomile", "Chard", "Cherry", "Chestnut", "Chickpea", "Chili Pepper", "Chrysanthemum", "Cilantro", "Clementine", "Clover", "Coconut", "Corn", "Cornflower", "Cosmos", "Cranberry", "Crocus", "Cucumber", "Currant", "Cyclamen", "Daffodil", "Dahlia", "Daisy", "Dandelion", "Date", "Daylily", "Delphinium", "Dill", "Dragon Fruit", "Elderberry", "Fennel", "Fern", "Fig", "Foxglove", "Freesia", "Fuchsia", "Gardenia", "Garlic", "Geranium", "Ginger", "Gladiolus", "Goldenrod", "Gooseberry", "Grape", "Grapefruit", "Guava", "Hazelnut", "Heather", "Hibiscus", "Holly", "Honeydew", "Honeysuckle", "Hops", "Hyacinth", "Hydrangea", "Iris", "Ivy", "Jasmine", "Juniper", "Kale", "Kiwi", "Kumquat", "Lavender", "Leek", "Lemon", "Lettuce", "Lilac", "Lily", "Lime", "Lotus", "Lychee", "Magnolia", "Mango", "Marigold", "Melon", "Mint", "Mushroom", "Narcissus", "Nasturtium", "Nectarine", "Nutmeg", "Oak", "Olive", "Onion", "Orange", "Orchid", "Oregano", "Pansy", "Papaya", "Parsley", "Peach", "Pear", "Peony", "Pepper", "Peppermint", "Persimmon", "Petunia", "Pine", "Pineapple", "Pistachio", "Plum", "Pomegranate", "Poppy", "Potato", "Pumpkin", "Radish", "Raspberry", "Rose", "Rosemary", "Sage", "Snapdragon", "Snowdrop", "Spinach", "Squash", "Starfruit", "Strawberry", "Sunflower", "Tangerine", "Tea", "Thistle", "Thyme", "Tomato", "Tulip", "Turnip", "Violet", "Walnut", "Watermelon", "Wheat", "Wisteria", "Yam", "Yarrow", "Zinnia", "Zucchini", "Basilisk", "Behemoth", "Centaur", "Cerberus", "Chimera", "Cyclops", "Dragon", "Drake", "Dryad", "Dwarf", "Elf", "Gargoyle", "Ghost", "Ghoul", "Giant", "Goblin", "Golem", "Griffin", "Hydra", "Imp", "Kobold", "Kraken", "Lich", "Manticore", "Medusa", "Mimic", "Minotaur", "Nymph", "Ogre", "Orc", "Owlbear", "Pegasus", "Phoenix", "Satyr", "Skeleton", "Sphinx", "Spirit", "Sprite", "Treant", "Troll", "Unicorn", "Vampire", "Werewolf", "Wraith", "Wyvern", "Yeti", "Zombie"];
 
-// --- STATE ---
-let gameState = { players: [], active: false, isDayTime: true };
-let socketOwner = {};
-let globalImageCache = {};
-let gameLog = []; // Dev log: full card movement history
-let cardOrdering = 'smart'; // 'top' = last touched on top, 'bottom' = last touched underneath, 'smart' = attachables under, others on top
+// --- ROOM STATE ---
+const rooms = new Map();       // roomCode â†’ Room object
+const socketToRoom = {};       // socketId â†’ roomCode
+
+function generateRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 to avoid confusion
+    let code;
+    do { code = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''); }
+    while (rooms.has(code));
+    return code;
+}
+
+function generateGuestName() {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+    return `${adj} ${noun}`;
+}
+
+function createRoom(name, hostSocketId, settings = {}) {
+    const code = generateRoomCode();
+    const room = {
+        code,
+        name: name || 'Commander Game',
+        hostSocketId,
+        settings: {
+            gameType: settings.gameType || 'commander',
+            maxPlayers: Math.min(4, Math.max(2, settings.maxPlayers || 4)),
+            brackets: settings.brackets || [1, 2, 3, 4, 5],
+            visibility: settings.visibility || 'public',
+            password: settings.password || null,
+            allowSpectators: settings.allowSpectators !== false,
+            spectatorQueue: settings.spectatorQueue || false,
+        },
+        phase: 'lobby',
+        gameState: { players: [], active: false, isDayTime: true },
+        socketOwner: {},
+        spectators: [],
+        queue: [],
+        globalImageCache: {},
+        gameLog: [],
+        chatLog: [],
+        cardOrdering: 'smart',
+        locked: false,
+        debounceTimers: {
+            life: {}, poison: {}, energy: {}, cardCounter: {}, cmdDamage: {}
+        }
+    };
+    rooms.set(code, room);
+    return room;
+}
+
+function getRoom(socket) {
+    const code = socketToRoom[socket.id];
+    return code ? rooms.get(code) : null;
+}
 
 function isAttachableCard(card) {
     const m = card.meta;
@@ -641,170 +690,27 @@ function isAttachableCard(card) {
     return false;
 }
 
-// --- Debounced Counter Logging (unified) ---
-// All use 1.8s idle timers. Each map is keyed by a unique key for the counter.
+// --- Room-scoped helpers ---
 const DEBOUNCE_MS = 1800;
-const lifeDebounceTimers = {};      // key: pid
-const poisonDebounceTimers = {};    // key: pid
-const energyDebounceTimers = {};    // key: pid
-const cardCounterTimers = {};       // key: pid_uid
-const cmdDamageTimers = {};         // key: pid_cmdUid
 
-function debouncedLifeLog(pid) {
-    const p = gameState.players.find(x => x.id === pid);
-    if (!p) return;
-    if (!lifeDebounceTimers[pid]) {
-        lifeDebounceTimers[pid] = { initial: p.life, timer: null };
-    }
-    if (lifeDebounceTimers[pid].timer) clearTimeout(lifeDebounceTimers[pid].timer);
-    lifeDebounceTimers[pid].timer = setTimeout(() => {
-        const pNow = gameState.players.find(x => x.id === pid);
-        if (!pNow) { delete lifeDebounceTimers[pid]; return; }
-        const initial = lifeDebounceTimers[pid].initial;
-        const diff = pNow.life - initial;
-        if (diff > 0) {
-            addLogEntry({ type: 'lifeGain', pid, playerName: getPlayerName(pid), amount: diff, from: initial, to: pNow.life });
-        } else if (diff < 0) {
-            addLogEntry({ type: 'lifeLoss', pid, playerName: getPlayerName(pid), amount: Math.abs(diff), from: initial, to: pNow.life });
-        }
-        delete lifeDebounceTimers[pid];
-    }, DEBOUNCE_MS);
-}
-
-function debouncedPoisonLog(pid) {
-    const p = gameState.players.find(x => x.id === pid);
-    if (!p) return;
-    if (!poisonDebounceTimers[pid]) {
-        poisonDebounceTimers[pid] = { initial: p.poison, timer: null };
-    }
-    if (poisonDebounceTimers[pid].timer) clearTimeout(poisonDebounceTimers[pid].timer);
-    poisonDebounceTimers[pid].timer = setTimeout(() => {
-        const pNow = gameState.players.find(x => x.id === pid);
-        if (!pNow) { delete poisonDebounceTimers[pid]; return; }
-        const initial = poisonDebounceTimers[pid].initial;
-        const diff = pNow.poison - initial;
-        if (diff !== 0) {
-            addLogEntry({ type: 'poison', pid, playerName: getPlayerName(pid), amount: Math.abs(diff), from: initial, to: pNow.poison, gained: diff > 0 });
-        }
-        delete poisonDebounceTimers[pid];
-    }, DEBOUNCE_MS);
-}
-
-function debouncedEnergyLog(pid) {
-    const p = gameState.players.find(x => x.id === pid);
-    if (!p) return;
-    if (!energyDebounceTimers[pid]) {
-        energyDebounceTimers[pid] = { initial: p.energy, timer: null };
-    }
-    if (energyDebounceTimers[pid].timer) clearTimeout(energyDebounceTimers[pid].timer);
-    energyDebounceTimers[pid].timer = setTimeout(() => {
-        const pNow = gameState.players.find(x => x.id === pid);
-        if (!pNow) { delete energyDebounceTimers[pid]; return; }
-        const initial = energyDebounceTimers[pid].initial;
-        const diff = pNow.energy - initial;
-        if (diff !== 0) {
-            addLogEntry({ type: 'energy', pid, playerName: getPlayerName(pid), amount: Math.abs(diff), from: initial, to: pNow.energy, gained: diff > 0 });
-        }
-        delete energyDebounceTimers[pid];
-    }, DEBOUNCE_MS);
-}
-
-function debouncedCardCounterLog(pid, uid, cardName) {
-    const key = `${pid}_${uid}`;
-    const p = gameState.players.find(x => x.id === pid);
-    if (!p) return;
-    // Find card across all zones
-    const allZones = ['battlefield', 'command', 'hand', 'library', 'graveyard', 'exile'];
-    let card = null;
-    for (const z of allZones) { card = (p[z] || []).find(c => c.uid === uid); if (card) break; }
-    if (!card) return;
-    const qtyFilter = c => /^.+:-?\d+$/.test(c);
-    if (!cardCounterTimers[key]) {
-        const initialQty = (card.counters || []).filter(qtyFilter);
-        cardCounterTimers[key] = { initial: JSON.stringify(initialQty), timer: null, cardName };
-    }
-    if (cardCounterTimers[key].timer) clearTimeout(cardCounterTimers[key].timer);
-    cardCounterTimers[key].timer = setTimeout(() => {
-        const pNow = gameState.players.find(x => x.id === pid);
-        let cardNow = null;
-        if (pNow) { for (const z of allZones) { cardNow = (pNow[z] || []).find(c => c.uid === uid); if (cardNow) break; } }
-        const initialStr = cardCounterTimers[key].initial;
-        const currentQty = (cardNow ? (cardNow.counters || []) : []).filter(qtyFilter);
-        const currentStr = JSON.stringify(currentQty);
-        if (initialStr !== currentStr && currentQty.length > 0) {
-            const summary = currentQty.join(', ');
-            addLogEntry({ type: 'counterChange', pid, playerName: getPlayerName(pid), cardName: cardCounterTimers[key].cardName, counters: summary });
-        }
-        delete cardCounterTimers[key];
-    }, DEBOUNCE_MS);
-}
-
-function debouncedCmdDamageLog(pid, cmdUid, cmdName) {
-    const key = `${pid}_${cmdUid}`;
-    const p = gameState.players.find(x => x.id === pid);
-    if (!p) return;
-    const currentDmg = p.cmdDamage[cmdUid] ? p.cmdDamage[cmdUid].damage : 0;
-    if (!cmdDamageTimers[key]) {
-        cmdDamageTimers[key] = { initial: currentDmg, initialLife: p.life, timer: null, cmdName };
-    }
-    if (cmdDamageTimers[key].timer) clearTimeout(cmdDamageTimers[key].timer);
-    cmdDamageTimers[key].timer = setTimeout(() => {
-        const pNow = gameState.players.find(x => x.id === pid);
-        if (!pNow) { delete cmdDamageTimers[key]; return; }
-        const nowDmg = pNow.cmdDamage[cmdUid] ? pNow.cmdDamage[cmdUid].damage : 0;
-        const initial = cmdDamageTimers[key].initial;
-        const diff = nowDmg - initial;
-        if (diff !== 0) {
-            addLogEntry({ type: 'cmdDamage', pid, playerName: getPlayerName(pid), cmdName: cmdDamageTimers[key].cmdName, amount: Math.abs(diff), from: initial, to: nowDmg, gained: diff > 0, lifeBefore: cmdDamageTimers[key].initialLife, life: pNow.life });
-        }
-        delete cmdDamageTimers[key];
-    }, DEBOUNCE_MS);
-}
-
-function clearAllDebounceTimers() {
-    for (const map of [lifeDebounceTimers, poisonDebounceTimers, energyDebounceTimers, cardCounterTimers, cmdDamageTimers]) {
-        for (const key of Object.keys(map)) {
-            if (map[key].timer) clearTimeout(map[key].timer);
-            delete map[key];
-        }
-    }
-}
-
-function addLogEntry(entry) {
+function addLogEntry(room, entry) {
     entry.time = Date.now();
-    gameLog.push(entry);
-    io.emit('gameLog', entry);
+    room.gameLog.push(entry);
+    io.to(room.code).emit('gameLog', entry);
 }
 
-function getPlayerName(pid) {
-    const p = gameState.players.find(x => x.id === pid);
+function getPlayerName(room, pid) {
+    const p = room.gameState.players.find(x => x.id === pid);
     return p ? p.name : pid;
 }
 
-function generateGuestName() {
-    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-    return `${adj} ${noun}`;
-}
-
-function makeData(c, ownerId, isToken = false) {
+function makeData(room, c, ownerId, isToken = false) {
     const uid = Math.random().toString(36).substr(2, 9);
-
-    globalImageCache[uid] = {
-        front: c.image || null,
-        back: c.backImage || null
-    };
-
+    room.globalImageCache[uid] = { front: c.image || null, back: c.backImage || null };
     return {
-        ...c,
-        uid: uid,
-        owner: ownerId,
-        image: null,
-        backImage: null,
-        rotation: 0,
-        transformed: false,
-        isToken: isToken,
-        counters: [],
+        ...c, uid, owner: ownerId,
+        image: null, backImage: null,
+        rotation: 0, transformed: false, isToken, counters: [],
         x: 0.5, y: 0.5
     };
 }
@@ -816,396 +722,176 @@ function shuffle(a) {
     }
 }
 
-function broadcastState() {
-    io.sockets.sockets.forEach((socket) => {
-        const myPid = socketOwner[socket.id];
+function broadcastState(room) {
+    io.in(room.code).fetchSockets().then(sockets => {
+        for (const socket of sockets) {
+            const myPid = room.socketOwner[socket.id];
+            const isSpectator = room.spectators.includes(socket.id);
 
-        const secretPlayers = gameState.players.map(p => {
-            if (p.id !== myPid) {
-                return {
-                    ...p,
-                    hand: p.hand.map(c => ({
-                        uid: c.uid,
-                        owner: c.owner,
-                        isUnknown: true,
-                        counters: c.counters
-                    })),
-                    library: p.library.map(() => ({ uid: 'hidden' }))
-                };
-            }
-            return p;
-        });
+            const secretPlayers = room.gameState.players.map(p => {
+                if (p.id !== myPid || isSpectator) {
+                    return {
+                        ...p,
+                        hand: p.hand.map(c => ({
+                            uid: c.uid, owner: c.owner, isUnknown: true,
+                            counters: c.counters
+                        })),
+                        library: p.library.map(() => ({ uid: 'hidden' }))
+                    };
+                }
+                return p;
+            });
 
-        socket.emit('stateUpdate', { players: secretPlayers, active: gameState.active, isDayTime: gameState.isDayTime });
+            socket.emit('stateUpdate', {
+                players: secretPlayers,
+                active: room.gameState.active,
+                isDayTime: room.gameState.isDayTime
+            });
+        }
     });
 }
 
-io.on('connection', (socket) => {
-    console.log(`[Connect] ${socket.id}`);
+function broadcastRoomInfo(room) {
+    const info = getRoomInfo(room);
+    io.to(room.code).emit('roomUpdate', info);
+}
 
-    socket.emit('updateImageCache', globalImageCache);
-    socket.emit('gameLogFull', gameLog); // Send full log on connect
-    if (gameState.players.length > 0) broadcastState();
+function getRoomInfo(room) {
+    const players = room.gameState.players.map(p => ({ id: p.id, name: p.name }));
+    const hostPid = room.socketOwner[room.hostSocketId] || null;
+    return {
+        code: room.code,
+        name: room.name,
+        hostSocketId: room.hostSocketId,
+        hostPid,
+        settings: room.settings,
+        phase: room.phase,
+        locked: room.locked,
+        playerCount: room.gameState.players.length,
+        spectatorCount: room.spectators.length,
+        players,
+        spectators: room.spectators.length,
+        queueCount: room.queue.length,
+    };
+}
 
-    socket.on('registerPlayer', ({ deckData, displayName }) => {
-        const slots = ['P1', 'P2', 'P3', 'P4'];
-        const takenSeats = Object.values(socketOwner);
-        const assignedPid = slots.find(slot => !takenSeats.includes(slot));
-
-        if (!assignedPid) {
-            socket.emit('joinError', 'Game is full (4/4 players)!');
-            return;
+function destroyRoom(code) {
+    const room = rooms.get(code);
+    if (!room) return;
+    // Clear all debounce timers
+    for (const map of Object.values(room.debounceTimers)) {
+        for (const key of Object.keys(map)) {
+            if (map[key] && map[key].timer) clearTimeout(map[key].timer);
+            delete map[key];
         }
+    }
+    io.to(code).emit('roomClosed', { reason: 'Host disconnected' });
+    // Remove all sockets from the Socket.IO room
+    io.in(code).socketsLeave(code);
+    // Clean up socketToRoom
+    for (const [sid, rc] of Object.entries(socketToRoom)) {
+        if (rc === code) delete socketToRoom[sid];
+    }
+    rooms.delete(code);
+    console.log(`[Room Destroyed] ${code}`);
+}
 
-        const pid = assignedPid;
-        socket.emit('playerAssigned', { pid });
-        socketOwner[socket.id] = pid;
+// --- Debounced logging (room-scoped) ---
+function debouncedLifeLog(room, pid) {
+    const p = room.gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    const timers = room.debounceTimers.life;
+    if (!timers[pid]) timers[pid] = { initial: p.life, timer: null };
+    if (timers[pid].timer) clearTimeout(timers[pid].timer);
+    timers[pid].timer = setTimeout(() => {
+        const pNow = room.gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete timers[pid]; return; }
+        const diff = pNow.life - timers[pid].initial;
+        if (diff > 0) addLogEntry(room, { type: 'lifeGain', pid, playerName: getPlayerName(room, pid), amount: diff, from: timers[pid].initial, to: pNow.life });
+        else if (diff < 0) addLogEntry(room, { type: 'lifeLoss', pid, playerName: getPlayerName(room, pid), amount: Math.abs(diff), from: timers[pid].initial, to: pNow.life });
+        delete timers[pid];
+    }, DEBOUNCE_MS);
+}
 
-        const existing = gameState.players.find(p => p.id === pid);
+function debouncedPoisonLog(room, pid) {
+    const p = room.gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    const timers = room.debounceTimers.poison;
+    if (!timers[pid]) timers[pid] = { initial: p.poison, timer: null };
+    if (timers[pid].timer) clearTimeout(timers[pid].timer);
+    timers[pid].timer = setTimeout(() => {
+        const pNow = room.gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete timers[pid]; return; }
+        const diff = pNow.poison - timers[pid].initial;
+        if (diff !== 0) addLogEntry(room, { type: 'poison', pid, playerName: getPlayerName(room, pid), amount: Math.abs(diff), from: timers[pid].initial, to: pNow.poison, gained: diff > 0 });
+        delete timers[pid];
+    }, DEBOUNCE_MS);
+}
 
-        let finalName = displayName;
-        if (!finalName || finalName.trim() === "") {
-            finalName = generateGuestName();
-        } else if (deckData.deckName && !displayName) {
-            finalName = deckData.deckName;
+function debouncedEnergyLog(room, pid) {
+    const p = room.gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    const timers = room.debounceTimers.energy;
+    if (!timers[pid]) timers[pid] = { initial: p.energy, timer: null };
+    if (timers[pid].timer) clearTimeout(timers[pid].timer);
+    timers[pid].timer = setTimeout(() => {
+        const pNow = room.gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete timers[pid]; return; }
+        const diff = pNow.energy - timers[pid].initial;
+        if (diff !== 0) addLogEntry(room, { type: 'energy', pid, playerName: getPlayerName(room, pid), amount: Math.abs(diff), from: timers[pid].initial, to: pNow.energy, gained: diff > 0 });
+        delete timers[pid];
+    }, DEBOUNCE_MS);
+}
+
+function debouncedCardCounterLog(room, pid, uid, cardName) {
+    const key = `${pid}_${uid}`;
+    const p = room.gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    const allZones = ['battlefield', 'command', 'hand', 'library', 'graveyard', 'exile'];
+    let card = null;
+    for (const z of allZones) { card = (p[z] || []).find(c => c.uid === uid); if (card) break; }
+    if (!card) return;
+    const qtyFilter = c => /^.+:-?\d+$/.test(c);
+    const timers = room.debounceTimers.cardCounter;
+    if (!timers[key]) timers[key] = { initial: JSON.stringify((card.counters || []).filter(qtyFilter)), timer: null, cardName };
+    if (timers[key].timer) clearTimeout(timers[key].timer);
+    timers[key].timer = setTimeout(() => {
+        const pNow = room.gameState.players.find(x => x.id === pid);
+        let cardNow = null;
+        if (pNow) { for (const z of allZones) { cardNow = (pNow[z] || []).find(c => c.uid === uid); if (cardNow) break; } }
+        const currentQty = (cardNow ? (cardNow.counters || []) : []).filter(qtyFilter);
+        const currentStr = JSON.stringify(currentQty);
+        if (timers[key].initial !== currentStr && currentQty.length > 0) {
+            addLogEntry(room, { type: 'counterChange', pid, playerName: getPlayerName(room, pid), cardName: timers[key].cardName, counters: currentQty.join(', ') });
         }
+        delete timers[key];
+    }, DEBOUNCE_MS);
+}
 
-        if (!existing) {
-            const library = deckData.library.map(c => makeData(c, pid));
-            const command = deckData.command.map(c => makeData(c, pid));
-
-            // Snapshot commanders at game start so they persist across zone changes
-            const commanders = command.map(c => ({ uid: c.uid, name: c.name || 'Commander', _cacheId: c._cacheId || c.uid }));
-
-            const tokens = (deckData.tokens || []).map(t => {
-                const tUid = Math.random().toString(36).substr(2, 9);
-                globalImageCache[tUid] = { front: t.image, back: t.backImage };
-                return {
-                    ...t, id: tUid, uid: tUid, _cacheId: tUid,
-                    image: null, backImage: null
-                };
-            });
-
-            shuffle(library);
-
-            gameState.players.push({
-                id: pid, name: finalName, life: 40,
-                poison: 0, energy: 0, isMonarch: false,
-                cmdDamage: {}, // keyed by commander uid: { uid, name, owner, damage }
-                commanders, // persistent list of commander identities
-                library, command, tokens,
-                hand: [], graveyard: [], exile: [], battlefield: []
-            });
-
-            const p = gameState.players.find(x => x.id === pid);
-            for (let i = 0; i < 7; i++) if (p.library.length) doMoveCard(pid, 'library', pid, 'hand');
-
-            io.emit('updateImageCache', globalImageCache);
-        } else {
-            existing.name = finalName;
+function debouncedCmdDamageLog(room, pid, cmdUid, cmdName) {
+    const key = `${pid}_${cmdUid}`;
+    const p = room.gameState.players.find(x => x.id === pid);
+    if (!p) return;
+    const currentDmg = p.cmdDamage[cmdUid] ? p.cmdDamage[cmdUid].damage : 0;
+    const timers = room.debounceTimers.cmdDamage;
+    if (!timers[key]) timers[key] = { initial: currentDmg, initialLife: p.life, timer: null, cmdName };
+    if (timers[key].timer) clearTimeout(timers[key].timer);
+    timers[key].timer = setTimeout(() => {
+        const pNow = room.gameState.players.find(x => x.id === pid);
+        if (!pNow) { delete timers[key]; return; }
+        const nowDmg = pNow.cmdDamage[cmdUid] ? pNow.cmdDamage[cmdUid].damage : 0;
+        const diff = nowDmg - timers[key].initial;
+        if (diff !== 0) {
+            addLogEntry(room, { type: 'cmdDamage', pid, playerName: getPlayerName(room, pid), cmdName: timers[key].cmdName, amount: Math.abs(diff), from: timers[key].initial, to: nowDmg, gained: diff > 0, lifeBefore: timers[key].initialLife, life: pNow.life });
         }
-        addLogEntry({ type: 'playerJoin', pid, playerName: finalName });
-        broadcastState();
-    });
+        delete timers[key];
+    }, DEBOUNCE_MS);
+}
 
-    socket.on('spawnToken', ({ pid, templateId, x, y }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        const template = p.tokens.find(t => t.id === templateId);
-        if (template) {
-            const cacheData = globalImageCache[template._cacheId];
-            const token = makeData({
-                ...template,
-                image: cacheData ? cacheData.front : null,
-                backImage: cacheData ? cacheData.back : null
-            }, pid, true);
-            token.x = x; token.y = y;
-            if (cardOrdering === 'bottom' || (cardOrdering === 'smart' && isAttachableCard(token))) {
-                p.battlefield.unshift(token);
-            } else {
-                p.battlefield.push(token);
-            }
-            addLogEntry({ type: 'tokenSpawn', pid, playerName: getPlayerName(pid), tokenName: template.name || 'Token' });
-            io.emit('updateImageCache', globalImageCache);
-            broadcastState();
-        }
-    });
-
-    socket.on('untapAll', ({ pid }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        p.battlefield.forEach(c => {
-            // Normalize rotation to 0-359 range to handle over-rotation
-            const norm = ((c.rotation || 0) % 360 + 360) % 360;
-            // Only untap sideways cards (90/270). Preserve 0 and 180 (upside-down for flip cards)
-            if (norm === 90 || norm === 270) c.rotation = 0;
-        });
-        addLogEntry({ type: 'untapAll', pid, playerName: getPlayerName(pid) });
-        broadcastState();
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`[Disconnect] ${socket.id}`);
-        const pid = socketOwner[socket.id];
-        delete socketOwner[socket.id];
-
-        // Remove the disconnected player's data so their seat is freed
-        if (pid) {
-            const pIdx = gameState.players.findIndex(p => p.id === pid);
-            if (pIdx > -1) {
-                const player = gameState.players[pIdx];
-                addLogEntry({ type: 'playerLeave', pid, playerName: player.name });
-                // Clean up image cache for this player's cards
-                const allCards = [...player.library, ...player.hand, ...player.battlefield, ...player.graveyard, ...player.exile, ...player.command];
-                allCards.forEach(c => { if (c.uid) delete globalImageCache[c.uid]; });
-                (player.tokens || []).forEach(t => { if (t._cacheId) delete globalImageCache[t._cacheId]; });
-
-                gameState.players.splice(pIdx, 1);
-                console.log(`[Freed Seat] ${pid} — ${gameState.players.length}/4 players remain`);
-            }
-            broadcastState();
-        }
-
-        if (io.engine.clientsCount === 0 || gameState.players.length === 0) {
-            gameState.players = [];
-            socketOwner = {};
-            globalImageCache = {};
-            gameLog = [];
-        }
-    });
-
-    socket.on('resetGame', () => {
-        gameState = { players: [], active: false, isDayTime: true };
-        socketOwner = {};
-        globalImageCache = {};
-        gameLog = [];
-        clearAllDebounceTimers();
-        io.emit('updateImageCache', {});
-        broadcastState();
-        io.emit('resetClient');
-    });
-
-    socket.on('moveCard', (payload) => {
-        const { fromPid, fromZone, toPid, toZone, uid, x, y, method, index } = payload;
-        // Get card name before move
-        const srcP = gameState.players.find(p => p.id === fromPid);
-        const card = srcP ? (uid ? srcP[fromZone].find(c => c.uid === uid) : srcP[fromZone][0]) : null;
-        const cardName = card ? (card.name || 'Unknown') : 'Unknown';
-        doMoveCard(fromPid, fromZone, toPid, toZone, uid, x, y, method, index);
-        // Log the move (skip same-zone rearranging)
-        if (fromZone === toZone && fromPid === toPid) { broadcastState(); return; }
-        let dest = toZone;
-        if (toZone === 'library') {
-            const methodLabel = { top: 'Top', bottom: 'Bottom', shuffle: 'Shuffle' };
-            dest = `Library, ${methodLabel[method] || 'Top'}`;
-        }
-        addLogEntry({
-            type: 'move', cardName, fromZone, toZone, fromPid, toPid, method, dest,
-            fromPlayerName: getPlayerName(fromPid), toPlayerName: getPlayerName(toPid)
-        });
-        broadcastState();
-    });
-
-    socket.on('reorderZone', ({ pid, zone, uid, targetUid }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        const list = p[zone];
-        const oldIdx = list.findIndex(c => c.uid === uid);
-        const newIdx = list.findIndex(c => c.uid === targetUid);
-        if (oldIdx > -1 && newIdx > -1) {
-            const [item] = list.splice(oldIdx, 1);
-            list.splice(newIdx, 0, item);
-            // Log library rearranges (cheat-relevant)
-            if (zone === 'library') {
-                addLogEntry({ type: 'reorder', pid, zone, playerName: getPlayerName(pid) });
-            }
-            broadcastState();
-        }
-    });
-
-    socket.on('modLife', ({ pid, amt }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        if (!lifeDebounceTimers[pid]) {
-            lifeDebounceTimers[pid] = { initial: p.life, timer: null };
-        }
-        p.life += amt;
-        debouncedLifeLog(pid);
-        broadcastState();
-    });
-    socket.on('setLife', ({ pid, value }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        if (!lifeDebounceTimers[pid]) {
-            lifeDebounceTimers[pid] = { initial: p.life, timer: null };
-        }
-        p.life = value;
-        debouncedLifeLog(pid);
-        broadcastState();
-    });
-
-    // --- Poison ---
-    socket.on('modPoison', ({ pid, amt }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        if (!poisonDebounceTimers[pid]) {
-            poisonDebounceTimers[pid] = { initial: p.poison || 0, timer: null };
-        }
-        p.poison = Math.max(0, (p.poison || 0) + amt);
-        debouncedPoisonLog(pid);
-        broadcastState();
-    });
-
-    // --- Energy ---
-    socket.on('modEnergy', ({ pid, amt }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        if (!energyDebounceTimers[pid]) {
-            energyDebounceTimers[pid] = { initial: p.energy || 0, timer: null };
-        }
-        p.energy = Math.max(0, (p.energy || 0) + amt);
-        debouncedEnergyLog(pid);
-        broadcastState();
-    });
-
-    // --- Monarch ---
-    socket.on('setMonarch', ({ pid }) => {
-        gameState.players.forEach(p => p.isMonarch = false);
-        const p = gameState.players.find(x => x.id === pid);
-        if (p) {
-            p.isMonarch = true;
-            addLogEntry({ type: 'monarch', pid, playerName: getPlayerName(pid) });
-        }
-        broadcastState();
-    });
-    socket.on('removeMonarch', ({ pid }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (p) p.isMonarch = false;
-        broadcastState();
-    });
-
-    // --- Day/Night ---
-    socket.on('toggleDayNight', () => {
-        gameState.isDayTime = !gameState.isDayTime;
-        addLogEntry({ type: 'dayNight', isDayTime: gameState.isDayTime, playerName: getPlayerName(socketOwner[socket.id]) });
-        broadcastState();
-    });
-
-    // --- Commander Damage ---
-    socket.on('modCmdDamage', ({ pid, cmdUid, cmdName, cmdOwner, amt }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        if (!p.cmdDamage[cmdUid]) {
-            p.cmdDamage[cmdUid] = { uid: cmdUid, name: cmdName, owner: cmdOwner, damage: 0 };
-        }
-        const key = `${pid}_${cmdUid}`;
-        if (!cmdDamageTimers[key]) {
-            cmdDamageTimers[key] = { initial: p.cmdDamage[cmdUid].damage, initialLife: p.life, timer: null, cmdName };
-        }
-        const oldDmg = p.cmdDamage[cmdUid].damage;
-        p.cmdDamage[cmdUid].damage = Math.max(0, oldDmg + amt);
-        // Commander damage also affects life total (positive damage = life loss)
-        const actualDmgChange = p.cmdDamage[cmdUid].damage - oldDmg;
-        if (actualDmgChange !== 0) {
-            p.life -= actualDmgChange;
-        }
-        debouncedCmdDamageLog(pid, cmdUid, cmdName);
-        broadcastState();
-    });
-
-    socket.on('cardUpdate', ({ pid, zone, uid, updates }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (!p) return;
-        const card = p[zone].find(c => c.uid === uid);
-        if (!card) return;
-
-        // Log counter changes (debounced)
-        if (updates.counters) {
-            debouncedCardCounterLog(pid, uid, card.name || 'Unknown');
-        }
-
-        // Log rotation (tap/untap)
-        if (updates.rotation !== undefined && updates.rotation !== card.rotation) {
-            const normNew = ((updates.rotation % 360) + 360) % 360;
-            if (normNew === 90 || normNew === 270) {
-                addLogEntry({ type: 'tap', pid, playerName: getPlayerName(pid), cardName: card.name || 'Unknown' });
-            }
-        }
-
-        Object.assign(card, updates);
-        broadcastState();
-    });
-
-    socket.on('shuffle', ({ pid }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (p) shuffle(p.library);
-        addLogEntry({ type: 'shuffle', pid, playerName: getPlayerName(pid) });
-        broadcastState();
-    });
-
-    socket.on('logAssociation', ({ sourceName, targetName, sourceUid, targetUid, assocType }) => {
-        const pid = socketOwner[socket.id];
-        let message = '';
-        if (assocType === 'equipment') {
-            message = `${sourceName} became attached to ${targetName}`;
-        } else if (assocType === 'aura') {
-            message = `${sourceName} enchanted ${targetName}`;
-        } else if (assocType === 'copyToken') {
-            message = `Copied ${targetName}`;
-            // Transform the copy token: update name and clone target's image
-            if (sourceUid && targetUid) {
-                const p = gameState.players.find(x => x.id === pid);
-                if (p) {
-                    const allZones = ['battlefield', 'hand', 'command', 'graveyard', 'exile', 'library'];
-                    let token = null;
-                    for (const z of allZones) { token = (p[z] || []).find(c => c.uid === sourceUid); if (token) break; }
-                    if (token) {
-                        token.name = `${targetName} (Copy)`;
-                        // Clone target's image to the copy token
-                        if (globalImageCache[targetUid]) {
-                            globalImageCache[sourceUid] = { ...globalImageCache[targetUid] };
-                            io.emit('updateImageCache', { [sourceUid]: globalImageCache[sourceUid] });
-                        }
-                    }
-                }
-            }
-        } else if (assocType === 'reconfigure') {
-            message = `${sourceName} was reconfigured and attached to ${targetName}`;
-        }
-        if (message) {
-            addLogEntry({ type: 'association', pid, playerName: getPlayerName(pid), message });
-            broadcastState();
-        }
-    });
-
-    socket.on('setCardOrdering', ({ ordering }) => {
-        if (ordering === 'top' || ordering === 'bottom' || ordering === 'smart') {
-            cardOrdering = ordering;
-        }
-    });
-
-    socket.on('openInspect', ({ pid, zone }) => {
-        const ownerPid = socketOwner[socket.id];
-        addLogEntry({ type: 'inspect', pid: ownerPid || 'unknown', playerName: getPlayerName(ownerPid || 'unknown'), targetPid: pid, targetPlayerName: getPlayerName(pid), zone });
-    });
-
-    socket.on('deleteCard', ({ pid, zone, uid }) => {
-        const p = gameState.players.find(x => x.id === pid);
-        if (p) {
-            const idx = p[zone].findIndex(c => c.uid === uid);
-            if (idx > -1) {
-                const card = p[zone][idx];
-                doMoveCard(pid, zone, card.owner, 'graveyard', uid);
-                broadcastState();
-            }
-        }
-    });
-});
-
-function doMoveCard(fromPid, fromZone, toPid, toZone, uid, x = 0.5, y = 0.5, method = 'top', index = -1) {
+function doMoveCard(room, fromPid, fromZone, toPid, toZone, uid, x = 0.5, y = 0.5, method = 'top', index = -1) {
     if (toZone === 'tokens') return;
-    const srcP = gameState.players.find(p => p.id === fromPid);
-    const tgtP = gameState.players.find(p => p.id === toPid);
+    const srcP = room.gameState.players.find(p => p.id === fromPid);
+    const tgtP = room.gameState.players.find(p => p.id === toPid);
     if (!srcP || !tgtP) return;
 
     const srcList = srcP[fromZone];
@@ -1216,9 +902,7 @@ function doMoveCard(fromPid, fromZone, toPid, toZone, uid, x = 0.5, y = 0.5, met
     const idx = srcList.indexOf(card);
     if (idx > -1) srcList.splice(idx, 1);
 
-    if (toZone === 'battlefield') {
-        card.x = x; card.y = y;
-    }
+    if (toZone === 'battlefield') { card.x = x; card.y = y; }
     if (card.isToken && toZone !== 'battlefield') return;
 
     if (toZone === 'library') {
@@ -1230,14 +914,559 @@ function doMoveCard(fromPid, fromZone, toPid, toZone, uid, x = 0.5, y = 0.5, met
     } else {
         if (index !== -1 && index <= tgtList.length) {
             tgtList.splice(index, 0, card);
-        } else if (toZone === 'battlefield' && cardOrdering === 'bottom') {
+        } else if (toZone === 'battlefield' && room.cardOrdering === 'bottom') {
             tgtList.unshift(card);
-        } else if (toZone === 'battlefield' && cardOrdering === 'smart') {
+        } else if (toZone === 'battlefield' && room.cardOrdering === 'smart') {
             isAttachableCard(card) ? tgtList.unshift(card) : tgtList.push(card);
         } else {
             tgtList.push(card);
         }
     }
+}
+
+// === SOCKET CONNECTION ===
+io.on('connection', (socket) => {
+    console.log(`[Connect] ${socket.id}`);
+
+    // --- ROOM MANAGEMENT ---
+
+    socket.on('createRoom', ({ name, settings }, callback) => {
+        const room = createRoom(name, socket.id, settings);
+        socketToRoom[socket.id] = room.code;
+        socket.join(room.code);
+        console.log(`[Room Created] ${room.code} by ${socket.id} â€” "${room.name}"`);
+        if (callback) callback({ ok: true, code: room.code, room: getRoomInfo(room) });
+        // Broadcast updated room list to everyone in lobby
+        io.emit('roomListUpdate', getPublicRoomList());
+    });
+
+    socket.on('listRooms', (_, callback) => {
+        if (callback) callback(getPublicRoomList());
+    });
+
+    socket.on('joinRoom', ({ code, password, asSpectator }, callback) => {
+        const room = rooms.get(code);
+        if (!room) { if (callback) callback({ ok: false, error: 'Room not found' }); return; }
+        if (room.locked && socket.id !== room.hostSocketId) { if (callback) callback({ ok: false, error: 'Room is locked' }); return; }
+        if (room.settings.visibility === 'password' && room.settings.password && password !== room.settings.password) {
+            if (callback) callback({ ok: false, error: 'Incorrect password' }); return;
+        }
+
+        // Leave any current room first
+        const currentRoom = socketToRoom[socket.id];
+        if (currentRoom) leaveCurrentRoom(socket);
+
+        socketToRoom[socket.id] = room.code;
+        socket.join(room.code);
+
+        if (asSpectator || (room.phase === 'playing' && !room.socketOwner[socket.id])) {
+            // Join as spectator
+            if (!room.settings.allowSpectators && socket.id !== room.hostSocketId) {
+                if (callback) callback({ ok: false, error: 'Spectators not allowed' }); return;
+            }
+            room.spectators.push(socket.id);
+            console.log(`[Spectator Joined] ${socket.id} â†’ ${room.code}`);
+            socket.emit('updateImageCache', room.globalImageCache);
+            socket.emit('gameLogFull', room.gameLog);
+            if (room.phase === 'playing') broadcastState(room);
+        }
+
+        broadcastRoomInfo(room);
+        if (callback) callback({ ok: true, room: getRoomInfo(room), phase: room.phase });
+        io.emit('roomListUpdate', getPublicRoomList());
+    });
+
+    socket.on('leaveRoom', () => {
+        leaveCurrentRoom(socket);
+    });
+
+    socket.on('startGame', () => {
+        const room = getRoom(socket);
+        if (!room || socket.id !== room.hostSocketId) return;
+        if (room.phase !== 'lobby') return;
+        room.phase = 'playing';
+        broadcastRoomInfo(room);
+        io.emit('roomListUpdate', getPublicRoomList());
+        console.log(`[Game Started] ${room.code}`);
+    });
+
+    // --- HOST CONTROLS ---
+    socket.on('kickPlayer', ({ targetPid }) => {
+        const room = getRoom(socket);
+        if (!room || socket.id !== room.hostSocketId) return;
+        // Find the socket for targetPid
+        const targetSid = Object.entries(room.socketOwner).find(([, pid]) => pid === targetPid)?.[0];
+        if (!targetSid) return;
+        const targetSocket = io.sockets.sockets.get(targetSid);
+        if (targetSocket) {
+            targetSocket.emit('kicked', { reason: 'You were kicked by the host' });
+            leaveCurrentRoom(targetSocket);
+        }
+    });
+
+    socket.on('lockRoom', () => {
+        const room = getRoom(socket);
+        if (!room || socket.id !== room.hostSocketId) return;
+        room.locked = true;
+        broadcastRoomInfo(room);
+    });
+
+    socket.on('unlockRoom', () => {
+        const room = getRoom(socket);
+        if (!room || socket.id !== room.hostSocketId) return;
+        room.locked = false;
+        broadcastRoomInfo(room);
+    });
+
+    socket.on('transferHost', ({ targetSocketId }) => {
+        const room = getRoom(socket);
+        if (!room || socket.id !== room.hostSocketId) return;
+        if (socketToRoom[targetSocketId] !== room.code) return;
+        room.hostSocketId = targetSocketId;
+        console.log(`[Host Transfer] ${room.code} â†’ ${targetSocketId}`);
+        broadcastRoomInfo(room);
+    });
+
+    // --- CHAT ---
+    socket.on('chatMessage', ({ text }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const pid = room.socketOwner[socket.id];
+        const isSpectator = room.spectators.includes(socket.id);
+        const name = pid ? getPlayerName(room, pid) : (isSpectator ? 'Spectator' : 'Unknown');
+        const msg = { sender: name, text: text.substring(0, 500), time: Date.now(), isSpectator };
+        room.chatLog.push(msg);
+        io.to(room.code).emit('chatMessage', msg);
+    });
+
+    // --- GAME EVENTS (room-scoped) ---
+
+    socket.on('registerPlayer', ({ deckData, displayName }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        if (room.phase !== 'lobby' && room.phase !== 'playing') return;
+
+        // Remove from spectators if joining as player
+        room.spectators = room.spectators.filter(s => s !== socket.id);
+
+        const slots = Array.from({ length: room.settings.maxPlayers }, (_, i) => `P${i + 1}`);
+        const takenSeats = Object.values(room.socketOwner);
+        const assignedPid = slots.find(slot => !takenSeats.includes(slot));
+
+        if (!assignedPid) {
+            socket.emit('joinError', `Game is full (${room.settings.maxPlayers}/${room.settings.maxPlayers} players)!`);
+            return;
+        }
+
+        const pid = assignedPid;
+        socket.emit('playerAssigned', { pid });
+        room.socketOwner[socket.id] = pid;
+
+        const existing = room.gameState.players.find(p => p.id === pid);
+
+        let finalName = displayName;
+        if (!finalName || finalName.trim() === "") finalName = generateGuestName();
+        else if (deckData.deckName && !displayName) finalName = deckData.deckName;
+
+        if (!existing) {
+            const library = deckData.library.map(c => makeData(room, c, pid));
+            const command = deckData.command.map(c => makeData(room, c, pid));
+            const commanders = command.map(c => ({ uid: c.uid, name: c.name || 'Commander', _cacheId: c._cacheId || c.uid }));
+
+            const tokens = (deckData.tokens || []).map(t => {
+                const tUid = Math.random().toString(36).substr(2, 9);
+                room.globalImageCache[tUid] = { front: t.image, back: t.backImage };
+                return { ...t, id: tUid, uid: tUid, _cacheId: tUid, image: null, backImage: null };
+            });
+
+            shuffle(library);
+
+            room.gameState.players.push({
+                id: pid, name: finalName, life: 40,
+                poison: 0, energy: 0, isMonarch: false,
+                cmdDamage: {},
+                commanders, library, command, tokens,
+                hand: [], graveyard: [], exile: [], battlefield: []
+            });
+
+            const p = room.gameState.players.find(x => x.id === pid);
+            for (let i = 0; i < 7; i++) if (p.library.length) doMoveCard(room, pid, 'library', pid, 'hand');
+
+            io.to(room.code).emit('updateImageCache', room.globalImageCache);
+
+            if (deckData.cardBack) {
+                room.globalImageCache['__cardBack_' + pid] = { front: deckData.cardBack, back: null };
+                io.to(room.code).emit('updateImageCache', { ['__cardBack_' + pid]: room.globalImageCache['__cardBack_' + pid] });
+            }
+        } else {
+            existing.name = finalName;
+        }
+        addLogEntry(room, { type: 'playerJoin', pid, playerName: finalName });
+        broadcastState(room);
+        broadcastRoomInfo(room);
+        io.emit('roomListUpdate', getPublicRoomList());
+    });
+
+    socket.on('spawnToken', ({ pid, templateId, x, y }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        const template = p.tokens.find(t => t.id === templateId);
+        if (template) {
+            const cacheData = room.globalImageCache[template._cacheId];
+            const token = makeData(room, {
+                ...template,
+                image: cacheData ? cacheData.front : null,
+                backImage: cacheData ? cacheData.back : null
+            }, pid, true);
+            token.x = x; token.y = y;
+            if (room.cardOrdering === 'bottom' || (room.cardOrdering === 'smart' && isAttachableCard(token))) {
+                p.battlefield.unshift(token);
+            } else {
+                p.battlefield.push(token);
+            }
+            addLogEntry(room, { type: 'tokenSpawn', pid, playerName: getPlayerName(room, pid), tokenName: template.name || 'Token' });
+            io.to(room.code).emit('updateImageCache', room.globalImageCache);
+            broadcastState(room);
+        }
+    });
+
+    socket.on('untapAll', ({ pid }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        p.battlefield.forEach(c => {
+            const norm = ((c.rotation || 0) % 360 + 360) % 360;
+            if (norm === 90 || norm === 270) c.rotation = 0;
+        });
+        addLogEntry(room, { type: 'untapAll', pid, playerName: getPlayerName(room, pid) });
+        broadcastState(room);
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`[Disconnect] ${socket.id}`);
+        const code = socketToRoom[socket.id];
+        const room = code ? rooms.get(code) : null;
+
+        if (room) {
+            const pid = room.socketOwner[socket.id];
+            delete room.socketOwner[socket.id];
+            room.spectators = room.spectators.filter(s => s !== socket.id);
+            room.queue = room.queue.filter(s => s !== socket.id);
+
+            if (pid) {
+                const pIdx = room.gameState.players.findIndex(p => p.id === pid);
+                if (pIdx > -1) {
+                    const player = room.gameState.players[pIdx];
+                    addLogEntry(room, { type: 'playerLeave', pid, playerName: player.name });
+                    const allCards = [...player.library, ...player.hand, ...player.battlefield, ...player.graveyard, ...player.exile, ...player.command];
+                    allCards.forEach(c => { if (c.uid) delete room.globalImageCache[c.uid]; });
+                    (player.tokens || []).forEach(t => { if (t._cacheId) delete room.globalImageCache[t._cacheId]; });
+                    room.gameState.players.splice(pIdx, 1);
+                    console.log(`[Freed Seat] ${pid} in ${room.code} â€” ${room.gameState.players.length}/${room.settings.maxPlayers} players remain`);
+                }
+            }
+
+            // Host disconnected â†’ destroy room
+            if (socket.id === room.hostSocketId) {
+                destroyRoom(room.code);
+            } else {
+                broadcastState(room);
+                broadcastRoomInfo(room);
+            }
+        }
+
+        delete socketToRoom[socket.id];
+        io.emit('roomListUpdate', getPublicRoomList());
+    });
+
+    socket.on('resetGame', () => {
+        const room = getRoom(socket);
+        if (!room || socket.id !== room.hostSocketId) return;
+        room.gameState = { players: [], active: false, isDayTime: true };
+        room.socketOwner = {};
+        // Keep host in socketOwner
+        room.socketOwner[socket.id] = undefined; // Will re-register
+        room.globalImageCache = {};
+        room.gameLog = [];
+        room.phase = 'lobby';
+        // Clear debounce timers
+        for (const map of Object.values(room.debounceTimers)) {
+            for (const key of Object.keys(map)) {
+                if (map[key] && map[key].timer) clearTimeout(map[key].timer);
+                delete map[key];
+            }
+        }
+        // Reset socketOwner properly â€” remove all pid mappings
+        for (const sid of Object.keys(room.socketOwner)) {
+            delete room.socketOwner[sid];
+        }
+        io.to(room.code).emit('updateImageCache', {});
+        io.to(room.code).emit('resetClient');
+        broadcastState(room);
+        broadcastRoomInfo(room);
+        io.emit('roomListUpdate', getPublicRoomList());
+    });
+
+    socket.on('moveCard', (payload) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const { fromPid, fromZone, toPid, toZone, uid, x, y, method, index } = payload;
+        const srcP = room.gameState.players.find(p => p.id === fromPid);
+        const card = srcP ? (uid ? srcP[fromZone].find(c => c.uid === uid) : srcP[fromZone][0]) : null;
+        const cardName = card ? (card.name || 'Unknown') : 'Unknown';
+        doMoveCard(room, fromPid, fromZone, toPid, toZone, uid, x, y, method, index);
+        if (fromZone === toZone && fromPid === toPid) { broadcastState(room); return; }
+        let dest = toZone;
+        if (toZone === 'library') {
+            const methodLabel = { top: 'Top', bottom: 'Bottom', shuffle: 'Shuffle' };
+            dest = `Library, ${methodLabel[method] || 'Top'}`;
+        }
+        addLogEntry(room, {
+            type: 'move', cardName, fromZone, toZone, fromPid, toPid, method, dest,
+            fromPlayerName: getPlayerName(room, fromPid), toPlayerName: getPlayerName(room, toPid)
+        });
+        broadcastState(room);
+    });
+
+    socket.on('reorderZone', ({ pid, zone, uid, targetUid }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        const list = p[zone];
+        const oldIdx = list.findIndex(c => c.uid === uid);
+        const newIdx = list.findIndex(c => c.uid === targetUid);
+        if (oldIdx > -1 && newIdx > -1) {
+            const [item] = list.splice(oldIdx, 1);
+            list.splice(newIdx, 0, item);
+            if (zone === 'library') addLogEntry(room, { type: 'reorder', pid, zone, playerName: getPlayerName(room, pid) });
+            broadcastState(room);
+        }
+    });
+
+    socket.on('modLife', ({ pid, amt }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!room.debounceTimers.life[pid]) room.debounceTimers.life[pid] = { initial: p.life, timer: null };
+        p.life += amt;
+        debouncedLifeLog(room, pid);
+        broadcastState(room);
+    });
+
+    socket.on('setLife', ({ pid, value }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!room.debounceTimers.life[pid]) room.debounceTimers.life[pid] = { initial: p.life, timer: null };
+        p.life = value;
+        debouncedLifeLog(room, pid);
+        broadcastState(room);
+    });
+
+    socket.on('modPoison', ({ pid, amt }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!room.debounceTimers.poison[pid]) room.debounceTimers.poison[pid] = { initial: p.poison || 0, timer: null };
+        p.poison = Math.max(0, (p.poison || 0) + amt);
+        debouncedPoisonLog(room, pid);
+        broadcastState(room);
+    });
+
+    socket.on('modEnergy', ({ pid, amt }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!room.debounceTimers.energy[pid]) room.debounceTimers.energy[pid] = { initial: p.energy || 0, timer: null };
+        p.energy = Math.max(0, (p.energy || 0) + amt);
+        debouncedEnergyLog(room, pid);
+        broadcastState(room);
+    });
+
+    socket.on('setMonarch', ({ pid }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        room.gameState.players.forEach(p => p.isMonarch = false);
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (p) { p.isMonarch = true; addLogEntry(room, { type: 'monarch', pid, playerName: getPlayerName(room, pid) }); }
+        broadcastState(room);
+    });
+
+    socket.on('removeMonarch', ({ pid }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (p) p.isMonarch = false;
+        broadcastState(room);
+    });
+
+    socket.on('toggleDayNight', () => {
+        const room = getRoom(socket);
+        if (!room) return;
+        room.gameState.isDayTime = !room.gameState.isDayTime;
+        addLogEntry(room, { type: 'dayNight', isDayTime: room.gameState.isDayTime, playerName: getPlayerName(room, room.socketOwner[socket.id]) });
+        broadcastState(room);
+    });
+
+    socket.on('modCmdDamage', ({ pid, cmdUid, cmdName, cmdOwner, amt }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        if (!p.cmdDamage[cmdUid]) p.cmdDamage[cmdUid] = { uid: cmdUid, name: cmdName, owner: cmdOwner, damage: 0 };
+        const key = `${pid}_${cmdUid}`;
+        if (!room.debounceTimers.cmdDamage[key]) room.debounceTimers.cmdDamage[key] = { initial: p.cmdDamage[cmdUid].damage, initialLife: p.life, timer: null, cmdName };
+        const oldDmg = p.cmdDamage[cmdUid].damage;
+        p.cmdDamage[cmdUid].damage = Math.max(0, oldDmg + amt);
+        const actualDmgChange = p.cmdDamage[cmdUid].damage - oldDmg;
+        if (actualDmgChange !== 0) p.life -= actualDmgChange;
+        debouncedCmdDamageLog(room, pid, cmdUid, cmdName);
+        broadcastState(room);
+    });
+
+    socket.on('cardUpdate', ({ pid, zone, uid, updates }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (!p) return;
+        const card = p[zone].find(c => c.uid === uid);
+        if (!card) return;
+        if (updates.counters) debouncedCardCounterLog(room, pid, uid, card.name || 'Unknown');
+        if (updates.rotation !== undefined && updates.rotation !== card.rotation) {
+            const normNew = ((updates.rotation % 360) + 360) % 360;
+            if (normNew === 90 || normNew === 270) addLogEntry(room, { type: 'tap', pid, playerName: getPlayerName(room, pid), cardName: card.name || 'Unknown' });
+        }
+        Object.assign(card, updates);
+        broadcastState(room);
+    });
+
+    socket.on('shuffle', ({ pid }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (p) shuffle(p.library);
+        addLogEntry(room, { type: 'shuffle', pid, playerName: getPlayerName(room, pid) });
+        broadcastState(room);
+    });
+
+    socket.on('logAssociation', ({ sourceName, targetName, sourceUid, targetUid, assocType }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const pid = room.socketOwner[socket.id];
+        let message = '';
+        if (assocType === 'equipment') message = `${sourceName} became attached to ${targetName}`;
+        else if (assocType === 'aura') message = `${sourceName} enchanted ${targetName}`;
+        else if (assocType === 'copyToken') {
+            message = `Copied ${targetName}`;
+            if (sourceUid && targetUid) {
+                const p = room.gameState.players.find(x => x.id === pid);
+                if (p) {
+                    const allZones = ['battlefield', 'hand', 'command', 'graveyard', 'exile', 'library'];
+                    let token = null;
+                    for (const z of allZones) { token = (p[z] || []).find(c => c.uid === sourceUid); if (token) break; }
+                    if (token) {
+                        token.name = `${targetName} (Copy)`;
+                        if (room.globalImageCache[targetUid]) {
+                            room.globalImageCache[sourceUid] = { ...room.globalImageCache[targetUid] };
+                            io.to(room.code).emit('updateImageCache', { [sourceUid]: room.globalImageCache[sourceUid] });
+                        }
+                    }
+                }
+            }
+        } else if (assocType === 'reconfigure') message = `${sourceName} was reconfigured and attached to ${targetName}`;
+        if (message) { addLogEntry(room, { type: 'association', pid, playerName: getPlayerName(room, pid), message }); broadcastState(room); }
+    });
+
+    socket.on('setCardOrdering', ({ ordering }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        if (ordering === 'top' || ordering === 'bottom' || ordering === 'smart') room.cardOrdering = ordering;
+    });
+
+    socket.on('openInspect', ({ pid, zone }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const ownerPid = room.socketOwner[socket.id];
+        addLogEntry(room, { type: 'inspect', pid: ownerPid || 'unknown', playerName: getPlayerName(room, ownerPid || 'unknown'), targetPid: pid, targetPlayerName: getPlayerName(room, pid), zone });
+    });
+
+    socket.on('deleteCard', ({ pid, zone, uid }) => {
+        const room = getRoom(socket);
+        if (!room) return;
+        const p = room.gameState.players.find(x => x.id === pid);
+        if (p) {
+            const idx = p[zone].findIndex(c => c.uid === uid);
+            if (idx > -1) {
+                const card = p[zone][idx];
+                doMoveCard(room, pid, zone, card.owner, 'graveyard', uid);
+                broadcastState(room);
+            }
+        }
+    });
+});
+
+// --- Helper: leave current room ---
+function leaveCurrentRoom(socket) {
+    const code = socketToRoom[socket.id];
+    const room = code ? rooms.get(code) : null;
+    if (!room) return;
+
+    const pid = room.socketOwner[socket.id];
+    delete room.socketOwner[socket.id];
+    room.spectators = room.spectators.filter(s => s !== socket.id);
+    room.queue = room.queue.filter(s => s !== socket.id);
+
+    if (pid) {
+        const pIdx = room.gameState.players.findIndex(p => p.id === pid);
+        if (pIdx > -1) {
+            const player = room.gameState.players[pIdx];
+            addLogEntry(room, { type: 'playerLeave', pid, playerName: player.name });
+            const allCards = [...player.library, ...player.hand, ...player.battlefield, ...player.graveyard, ...player.exile, ...player.command];
+            allCards.forEach(c => { if (c.uid) delete room.globalImageCache[c.uid]; });
+            (player.tokens || []).forEach(t => { if (t._cacheId) delete room.globalImageCache[t._cacheId]; });
+            room.gameState.players.splice(pIdx, 1);
+        }
+    }
+
+    socket.leave(code);
+    delete socketToRoom[socket.id];
+
+    if (socket.id === room.hostSocketId) {
+        destroyRoom(code);
+    } else {
+        broadcastState(room);
+        broadcastRoomInfo(room);
+    }
+    io.emit('roomListUpdate', getPublicRoomList());
+}
+
+// --- Helper: get public room list ---
+function getPublicRoomList() {
+    const list = [];
+    for (const [, room] of rooms) {
+        if (room.settings.visibility === 'private') continue;
+        list.push({
+            code: room.code,
+            name: room.name,
+            playerCount: room.gameState.players.length,
+            maxPlayers: room.settings.maxPlayers,
+            spectatorCount: room.spectators.length,
+            phase: room.phase,
+            gameType: room.settings.gameType,
+            brackets: room.settings.brackets,
+            hasPassword: room.settings.visibility === 'password',
+            locked: room.locked,
+        });
+    }
+    return list;
 }
 
 // ============================================================================

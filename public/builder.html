@@ -682,9 +682,9 @@
                 <div style="padding:5px 0; display:flex; flex-direction:column; gap:4px;">
                     <textarea id="manOracle" placeholder="Rules Text" rows="3"
                         style="resize:vertical; font-size:0.85em;"></textarea>
-                    <input type="text" id="manManaCost" placeholder="Mana Cost (e.g. {2}{U}{U})">
+                    <input type="text" id="manManaCost" placeholder="Mana Cost (e.g. 2 U U)">
                     <input type="text" id="manManaValue" placeholder="Mana Value (auto from cost if blank)">
-                    <input type="text" id="manTypeLine" placeholder="Type Line (e.g. Creature \u2014 Human)"
+                    <input type="text" id="manTypeLine" placeholder="Type Line (e.g. Creature — Human)"
                         oninput="this.value=this.value.replace(/ - /g,' \u2014 ').replace(/(?<=\w)-(?=\w)/g,'\u2014')">
                     <div style="display:flex; gap:5px;">
                         <input type="text" id="manPower" placeholder="Power" style="flex:1;">
@@ -719,6 +719,21 @@
                 <button class="btn-block" onclick="importMTGSEXml()" style="margin-top:4px;">📄 Apply MTGSE XML</button>
                 <button class="btn-block" onclick="autoFillScryfall()" style="margin-top:4px;">🔍 Auto-fill from
                     Scryfall</button>
+            </div>
+
+            <div style="border-top:1px dashed #444; margin-top:5px; padding-top:5px;">
+                <h3>Default Card Back</h3>
+                <p style="font-size:0.75em; color:var(--text-muted); margin:0 0 5px;">Used when flipping non-DFC cards.
+                    If unset, the standard MTG card back is used.</p>
+                <div class="file-input-wrapper">
+                    <label>Card Back Image</label>
+                    <input type="file" id="cardBackInput" accept="image/*" onchange="uploadCardBack()">
+                </div>
+                <div id="cardBackPreview" style="display:none; margin-top:5px; text-align:center;">
+                    <img id="cardBackImg" style="max-width:100px; border-radius:4px; border:1px solid #555;">
+                    <br>
+                    <button style="margin-top:4px; font-size:0.75em;" onclick="clearCardBack()">✕ Clear</button>
+                </div>
             </div>
 
             <h3>3. Export</h3>
@@ -855,7 +870,30 @@
 
     <script>
         let deck = { command: [], library: [], tokens: [] };
+        let deckCardBack = null; // base64 default card back image
         let pollInterval = null;
+
+        // === DEFAULT CARD BACK ===
+        async function uploadCardBack() {
+            const file = document.getElementById('cardBackInput').files[0];
+            if (!file) return;
+            const b64 = await toBase64(file);
+            try {
+                const resp = await fetch('/api/builder/optimize-image', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: b64 })
+                });
+                const data = await resp.json();
+                deckCardBack = data.image || b64;
+            } catch { deckCardBack = b64; }
+            document.getElementById('cardBackImg').src = deckCardBack;
+            document.getElementById('cardBackPreview').style.display = 'block';
+        }
+        function clearCardBack() {
+            deckCardBack = null;
+            document.getElementById('cardBackInput').value = '';
+            document.getElementById('cardBackPreview').style.display = 'none';
+        }
 
         // === SORT (2-tiered) ===
         const RARITY_ORDER = { common: 0, uncommon: 1, rare: 2, mythic: 3 };
@@ -892,7 +930,8 @@
         }
 
         function syncDeck() {
-            fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+            const syncData = { ...deck, cardBack: deckCardBack || null };
+            fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(syncData) });
         }
 
         // === AUTO-FILL NAME FROM FILE ===
@@ -1414,6 +1453,13 @@
                     const loadedDeck = JSON.parse(e.target.result);
                     if (!loadedDeck.library && !loadedDeck.command) throw new Error("Invalid Deck JSON format");
 
+                    // Restore default card back if present
+                    if (loadedDeck.cardBack) {
+                        deckCardBack = loadedDeck.cardBack;
+                        document.getElementById('cardBackImg').src = deckCardBack;
+                        document.getElementById('cardBackPreview').style.display = 'block';
+                    }
+
                     const now = Date.now();
                     const mapCard = (c) => ({
                         id: c.id,
@@ -1773,9 +1819,14 @@
                     body: JSON.stringify({ image: b64 })
                 });
                 const data = await res.json();
-                deck[zone][idx].front = data.image || b64;
+                const optimized = data.image || b64;
+                if (deck[zone][idx].is_flipped && deck[zone][idx].back) {
+                    deck[zone][idx].back = optimized;
+                } else {
+                    deck[zone][idx].front = optimized;
+                }
                 deck[zone][idx]._modified = Date.now();
-                fetch('/api/builder/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deck) });
+                syncDeck();
                 render();
             };
             input.click();
@@ -1904,6 +1955,7 @@
 
             const cleanDeck = {
                 deckName: name,
+                cardBack: deckCardBack || null,
                 command: deck.command.map(cleanCard),
                 library: deck.library.map(cleanCard),
                 tokens: deck.tokens.map(cleanCard)

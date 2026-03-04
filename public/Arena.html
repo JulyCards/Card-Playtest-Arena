@@ -489,6 +489,332 @@
             text-align: center;
         }
 
+        /* === LOBBY STYLES === */
+        .lobby-container {
+            width: 600px;
+            max-width: 95vw;
+            text-align: center;
+        }
+
+        .lobby-title {
+            font-size: 2em;
+            font-weight: 800;
+            background: linear-gradient(135deg, #61afef, #c678dd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+        }
+
+        .lobby-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 25px;
+        }
+
+        .lobby-btn {
+            padding: 10px 20px;
+            border: 1px solid #555;
+            border-radius: 8px;
+            background: #2a2a2a;
+            color: #ddd;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .lobby-btn:hover {
+            border-color: #888;
+            background: #333;
+        }
+
+        .host-btn {
+            border-color: #5cb85c;
+            color: #5cb85c;
+        }
+
+        .host-btn:hover {
+            background: #5cb85c33;
+        }
+
+        .join-btn {
+            border-color: #61afef;
+            color: #61afef;
+        }
+
+        .join-btn:hover {
+            background: #61afef33;
+        }
+
+        .lobby-section {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: left;
+        }
+
+        .lobby-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 1.1em;
+            color: #aaa;
+        }
+
+        .lobby-refresh {
+            background: none;
+            border: 1px solid #555;
+            border-radius: 5px;
+            color: #aaa;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+
+        .lobby-refresh:hover {
+            border-color: #888;
+            color: #ddd;
+        }
+
+        .room-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .room-empty {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+
+        .room-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: #252525;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .room-card:hover {
+            border-color: #61afef;
+        }
+
+        .room-card-info h3 {
+            margin: 0 0 4px;
+            font-size: 1em;
+            color: #eee;
+        }
+
+        .room-card-info .room-meta {
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .room-card-info .room-meta span {
+            margin-right: 10px;
+        }
+
+        .room-card-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .room-card-right .player-count {
+            font-size: 0.9em;
+            color: #aaa;
+        }
+
+        .room-card-right .room-join-btn {
+            padding: 5px 14px;
+            border: 1px solid #61afef;
+            border-radius: 5px;
+            background: transparent;
+            color: #61afef;
+            cursor: pointer;
+        }
+
+        .room-card-right .room-join-btn:hover {
+            background: #61afef33;
+        }
+
+        .bracket-tag {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            background: #3a3a3a;
+            color: #aaa;
+            margin-right: 3px;
+        }
+
+        /* === ROOM LOBBY === */
+        .room-lobby-container {
+            width: 700px;
+            max-width: 95vw;
+            max-height: 90vh;
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .room-lobby-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .room-lobby-title {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #eee;
+        }
+
+        .room-lobby-code {
+            font-family: monospace;
+            font-size: 1.1em;
+            background: #333;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+            color: #61afef;
+            letter-spacing: 0.15em;
+        }
+
+        .copy-code-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-left: 4px;
+        }
+
+        .room-lobby-meta {
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .room-lobby-body {
+            flex: 1;
+            display: flex;
+            gap: 1px;
+            background: #333;
+            overflow: hidden;
+        }
+
+        .room-lobby-seats {
+            flex: 1;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #1e1e1e;
+            overflow-y: auto;
+        }
+
+        .seat-card {
+            padding: 12px;
+            background: #252525;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .seat-card.filled {
+            border-color: #5cb85c55;
+        }
+
+        .seat-card.empty {
+            border-style: dashed;
+            color: #666;
+        }
+
+        .seat-card .seat-name {
+            font-weight: 600;
+        }
+
+        .seat-card .seat-badge {
+            font-size: 0.75em;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #5cb85c33;
+            color: #5cb85c;
+        }
+
+        .room-lobby-chat {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            background: #1e1e1e;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 0.85em;
+            color: #ccc;
+        }
+
+        .chat-messages .chat-msg {
+            margin-bottom: 5px;
+        }
+
+        .chat-messages .chat-sender {
+            color: #61afef;
+            font-weight: 600;
+        }
+
+        .chat-messages .chat-spectator {
+            color: #888;
+        }
+
+        .chat-input-row {
+            display: flex;
+            border-top: 1px solid #333;
+        }
+
+        .chat-input-row input {
+            flex: 1;
+            padding: 8px;
+            background: #252525;
+            border: none;
+            color: #ddd;
+            font-size: 0.85em;
+        }
+
+        .chat-input-row button {
+            padding: 8px 12px;
+            background: #333;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+        }
+
+        .room-lobby-footer {
+            padding: 12px 20px;
+            border-top: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
         .drop-options {
             display: flex;
             flex-direction: column;
@@ -973,16 +1299,124 @@
         </div>
     </div>
 
-    <div class="modal-overlay" id="joinModal" style="display:flex;">
-        <div class="modal-box small-modal">
-            <div class="modal-header">Join Game</div>
-            <input type="text" id="displayName" placeholder="Display Name (Optional)"
-                style="width:100%; margin-bottom:10px;">
-            <button onclick="document.getElementById('deckInput').click()" style="width:100%; padding:10px;">📂 Select
-                Deck JSON</button>
-            <input type="file" id="deckInput" accept=".json" style="display:none" onchange="joinGame(this)">
+    <!-- ======= PHASE 1: LOBBY (Host / Join / Browse) ======= -->
+    <div class="modal-overlay" id="lobbyOverlay" style="display:flex;">
+        <div class="lobby-container">
+            <h1 class="lobby-title">⚔️ MTG Commander Arena</h1>
+            <div class="lobby-actions">
+                <button class="lobby-btn host-btn" onclick="showHostModal()">🏠 Host a Game</button>
+                <button class="lobby-btn join-btn" onclick="showJoinCodeModal()">🔗 Join by Code</button>
+            </div>
+            <div class="lobby-section">
+                <div class="lobby-section-header">
+                    <span>Open Rooms</span>
+                    <button class="lobby-refresh" onclick="refreshRoomList()">🔄 Refresh</button>
+                </div>
+                <div id="roomList" class="room-list">
+                    <div class="room-empty">No rooms available. Host one!</div>
+                </div>
+            </div>
         </div>
     </div>
+
+    <!-- Host Settings Modal -->
+    <div class="modal-overlay" id="hostModal">
+        <div class="modal-box small-modal" style="width:380px;">
+            <div class="modal-header"><span>Host a Game</span> <button
+                    onclick="document.getElementById('hostModal').style.display='none'">✕</button></div>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+                <input type="text" id="hostRoomName" placeholder="Room Name" style="width:100%;" value="">
+                <label style="color:var(--text-muted); font-size:0.85em;">Game Type</label>
+                <select id="hostGameType" disabled style="width:100%; padding:6px;">
+                    <option value="commander">Commander</option>
+                </select>
+                <label style="color:var(--text-muted); font-size:0.85em;">Max Players</label>
+                <div style="display:flex; gap:10px;">
+                    <label><input type="radio" name="hostMax" value="2"> 2</label>
+                    <label><input type="radio" name="hostMax" value="3"> 3</label>
+                    <label><input type="radio" name="hostMax" value="4" checked> 4</label>
+                </div>
+                <label style="color:var(--text-muted); font-size:0.85em;">Accepted Brackets</label>
+                <div style="display:flex; gap:10px;">
+                    <label><input type="checkbox" class="hostBracket" value="1" checked> 1</label>
+                    <label><input type="checkbox" class="hostBracket" value="2" checked> 2</label>
+                    <label><input type="checkbox" class="hostBracket" value="3" checked> 3</label>
+                    <label><input type="checkbox" class="hostBracket" value="4" checked> 4</label>
+                    <label><input type="checkbox" class="hostBracket" value="5" checked> 5</label>
+                </div>
+                <label style="color:var(--text-muted); font-size:0.85em;">Visibility</label>
+                <div style="display:flex; gap:10px;">
+                    <label><input type="radio" name="hostVis" value="public" checked> Public</label>
+                    <label><input type="radio" name="hostVis" value="password"> Password</label>
+                    <label><input type="radio" name="hostVis" value="private"> Private</label>
+                </div>
+                <input type="password" id="hostPassword" placeholder="Password" style="width:100%; display:none;">
+                <label style="display:flex; align-items:center; gap:6px; color:var(--text-muted); font-size:0.85em;">
+                    <input type="checkbox" id="hostSpectators" checked> Allow Spectators
+                </label>
+                <button class="lobby-btn host-btn" onclick="doCreateRoom()" style="margin-top:5px;">Create Room</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join by Code Modal -->
+    <div class="modal-overlay" id="joinCodeModal">
+        <div class="modal-box small-modal" style="width:320px;">
+            <div class="modal-header"><span>Join by Code</span> <button
+                    onclick="document.getElementById('joinCodeModal').style.display='none'">✕</button></div>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+                <input type="text" id="joinRoomCode" placeholder="Room Code (e.g. XK7M)" maxlength="4"
+                    style="width:100%; text-align:center; font-size:1.5em; letter-spacing:0.3em; text-transform:uppercase;">
+                <input type="password" id="joinPassword" placeholder="Password (if required)" style="width:100%;">
+                <button class="lobby-btn join-btn" onclick="doJoinByCode()">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======= PHASE 2: ROOM LOBBY (pre-game) ======= -->
+    <div class="modal-overlay" id="roomLobby">
+        <div class="room-lobby-container">
+            <div class="room-lobby-header">
+                <div>
+                    <span class="room-lobby-title" id="roomLobbyTitle">Room</span>
+                    <span class="room-lobby-code" id="roomLobbyCode">XXXX</span>
+                    <button class="copy-code-btn" onclick="copyRoomCode()" title="Copy room code">📋</button>
+                </div>
+                <div class="room-lobby-meta" id="roomLobbyMeta">Commander • 4 players</div>
+            </div>
+            <div class="room-lobby-body">
+                <div class="room-lobby-seats" id="roomLobbySeats">
+                    <!-- dynamically populated -->
+                </div>
+                <div class="room-lobby-chat">
+                    <div class="chat-messages" id="lobbyChatMessages"></div>
+                    <div class="chat-input-row">
+                        <input type="text" id="lobbyChatInput" placeholder="Chat..."
+                            onkeydown="if(event.key==='Enter')sendChat()">
+                        <button onclick="sendChat()">Send</button>
+                    </div>
+                </div>
+            </div>
+            <div class="room-lobby-footer">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="displayName" placeholder="Display Name (optional)" style="width:180px;">
+                    <button class="lobby-btn" onclick="document.getElementById('deckInput').click()">📂 Load
+                        Deck</button>
+                    <input type="file" id="deckInput" accept=".json" style="display:none" onchange="joinGame(this)">
+                    <span id="deckStatus" style="color:var(--text-muted); font-size:0.85em;"></span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="lobby-btn" onclick="doLeaveRoom()" style="background:#c44;">Leave</button>
+                    <button class="lobby-btn host-btn" id="startGameBtn" onclick="doStartGame()" style="display:none;">▶
+                        Start Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden deck input for in-game -->
+    <input type="file" id="deckInputGame" accept=".json" style="display:none">
+
 
     <div class="modal-overlay" id="gridModal">
         <div class="modal-box">
@@ -1078,6 +1512,217 @@
         // Arena settings (client-side)
         const arenaSettings = { cardOrdering: 'smart' };
 
+        // --- ROOM STATE ---
+        let currentRoomCode = null;
+        let currentRoomInfo = null;
+        let isHost = false;
+        let isSpectator = false;
+
+        // --- VISIBILITY TOGGLE FOR PASSWORD FIELD ---
+        document.querySelectorAll('input[name="hostVis"]').forEach(r => {
+            r.addEventListener('change', () => {
+                document.getElementById('hostPassword').style.display =
+                    document.querySelector('input[name="hostVis"]:checked').value === 'password' ? '' : 'none';
+            });
+        });
+
+        // --- LOBBY FUNCTIONS ---
+        function showHostModal() { document.getElementById('hostModal').style.display = 'flex'; }
+        function showJoinCodeModal() { document.getElementById('joinCodeModal').style.display = 'flex'; }
+
+        function doCreateRoom() {
+            const name = document.getElementById('hostRoomName').value.trim() || 'Commander Game';
+            const maxPlayers = parseInt(document.querySelector('input[name="hostMax"]:checked').value);
+            const brackets = Array.from(document.querySelectorAll('.hostBracket:checked')).map(c => parseInt(c.value));
+            const visibility = document.querySelector('input[name="hostVis"]:checked').value;
+            const password = visibility === 'password' ? document.getElementById('hostPassword').value : null;
+            const allowSpectators = document.getElementById('hostSpectators').checked;
+
+            socket.emit('createRoom', {
+                name,
+                settings: { maxPlayers, brackets, visibility, password, allowSpectators }
+            }, (res) => {
+                if (res.ok) {
+                    currentRoomCode = res.code;
+                    isHost = true;
+                    document.getElementById('hostModal').style.display = 'none';
+                    document.getElementById('lobbyOverlay').style.display = 'none';
+                    enterRoomLobby(res.room);
+                } else {
+                    alert(res.error || 'Failed to create room');
+                }
+            });
+        }
+
+        function doJoinByCode() {
+            const code = document.getElementById('joinRoomCode').value.trim().toUpperCase();
+            const password = document.getElementById('joinPassword').value;
+            if (!code || code.length < 4) { alert('Enter a 4-character room code'); return; }
+            doJoinRoom(code, password);
+        }
+
+        function doJoinRoom(code, password, asSpectator) {
+            socket.emit('joinRoom', { code, password, asSpectator }, (res) => {
+                if (res.ok) {
+                    currentRoomCode = code;
+                    isHost = false;
+                    isSpectator = !!asSpectator;
+                    document.getElementById('joinCodeModal').style.display = 'none';
+                    document.getElementById('lobbyOverlay').style.display = 'none';
+                    enterRoomLobby(res.room);
+                } else {
+                    alert(res.error || 'Failed to join room');
+                }
+            });
+        }
+
+        function enterRoomLobby(roomInfo) {
+            currentRoomInfo = roomInfo;
+            document.getElementById('roomLobby').style.display = 'flex';
+            updateRoomLobbyUI(roomInfo);
+        }
+
+        function updateRoomLobbyUI(info) {
+            currentRoomInfo = info;
+            document.getElementById('roomLobbyTitle').textContent = info.name;
+            document.getElementById('roomLobbyCode').textContent = info.code;
+            const bracketStr = info.settings.brackets.length === 5 ? 'All' : info.settings.brackets.join(', ');
+            document.getElementById('roomLobbyMeta').textContent =
+                `Commander • ${info.settings.maxPlayers} players • Brackets: ${bracketStr}` +
+                (info.locked ? ' • 🔒 Locked' : '');
+
+            // Seats
+            const seatsEl = document.getElementById('roomLobbySeats');
+            let seatsHtml = '';
+            for (let i = 1; i <= info.settings.maxPlayers; i++) {
+                const pid = `P${i}`;
+                const player = info.players.find(p => p.id === pid);
+                if (player) {
+                    const hostBadge = info.hostPid === pid ? ' <span class="seat-badge" style="background:#c678dd33;color:#c678dd;">Host</span>' : '';
+                    seatsHtml += `<div class="seat-card filled"><span class="seat-name">${player.name}</span><span>${hostBadge} <span class="seat-badge">Joined</span></span></div>`;
+                } else {
+                    seatsHtml += `<div class="seat-card empty"><span>Seat ${i}</span><span style="color:#666;">Waiting...</span></div>`;
+                }
+            }
+            if (info.spectators > 0) {
+                seatsHtml += `<div style="color:#888; font-size:0.8em; margin-top:8px;">👁 ${info.spectators} spectator(s)</div>`;
+            }
+            seatsEl.innerHTML = seatsHtml;
+
+            // Show/hide Start Game button (host only)
+            isHost = info.hostSocketId === socket.id;
+            document.getElementById('startGameBtn').style.display = isHost ? '' : 'none';
+
+            // If game is playing, transition to game view
+            if (info.phase === 'playing') {
+                document.getElementById('roomLobby').style.display = 'none';
+                if (gameState.players.length > 0) renderGame();
+            }
+        }
+
+        function doLeaveRoom() {
+            socket.emit('leaveRoom');
+            currentRoomCode = null;
+            currentRoomInfo = null;
+            isHost = false;
+            myPid = null;
+            document.getElementById('roomLobby').style.display = 'none';
+            document.getElementById('lobbyOverlay').style.display = 'flex';
+            refreshRoomList();
+        }
+
+        function doStartGame() {
+            socket.emit('startGame');
+        }
+
+        function refreshRoomList() {
+            socket.emit('listRooms', null, (rooms) => { renderRoomList(rooms); });
+        }
+
+        function renderRoomList(rooms) {
+            const el = document.getElementById('roomList');
+            if (!rooms || rooms.length === 0) {
+                el.innerHTML = '<div class="room-empty">No rooms available. Host one!</div>';
+                return;
+            }
+            el.innerHTML = rooms.map(r => {
+                const bracketTags = r.brackets.map(b => `<span class="bracket-tag">B${b}</span>`).join('');
+                const lockIcon = r.locked ? '🔒 ' : '';
+                const pwIcon = r.hasPassword ? '🔑 ' : '';
+                const phaseLabel = r.phase === 'playing' ? '<span style="color:#e5c07b;">In Game</span>' : '<span style="color:#5cb85c;">Lobby</span>';
+                return `<div class="room-card" onclick="doJoinRoom('${r.code}')">
+                    <div class="room-card-info">
+                        <h3>${lockIcon}${pwIcon}${r.name}</h3>
+                        <div class="room-meta">
+                            <span>⚔️ ${r.gameType}</span>
+                            <span>${bracketTags}</span>
+                            <span>${phaseLabel}</span>
+                        </div>
+                    </div>
+                    <div class="room-card-right">
+                        <span class="player-count">${r.playerCount}/${r.maxPlayers}</span>
+                        <button class="room-join-btn">Join</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function copyRoomCode() {
+            if (currentRoomCode) {
+                navigator.clipboard.writeText(currentRoomCode);
+            }
+        }
+
+        function sendChat() {
+            const input = document.getElementById('lobbyChatInput');
+            const text = input.value.trim();
+            if (!text) return;
+            socket.emit('chatMessage', { text });
+            input.value = '';
+        }
+
+        // --- ROOM SOCKET HANDLERS ---
+        socket.on('roomUpdate', (info) => {
+            if (info.code === currentRoomCode) updateRoomLobbyUI(info);
+        });
+
+        socket.on('roomListUpdate', (rooms) => { renderRoomList(rooms); });
+
+        socket.on('roomClosed', ({ reason }) => {
+            alert(reason || 'Room was closed');
+            currentRoomCode = null;
+            currentRoomInfo = null;
+            isHost = false;
+            myPid = null;
+            document.getElementById('roomLobby').style.display = 'none';
+            document.getElementById('lobbyOverlay').style.display = 'flex';
+            refreshRoomList();
+        });
+
+        socket.on('kicked', ({ reason }) => {
+            alert(reason || 'You were kicked');
+            currentRoomCode = null;
+            currentRoomInfo = null;
+            isHost = false;
+            myPid = null;
+            document.getElementById('roomLobby').style.display = 'none';
+            document.getElementById('lobbyOverlay').style.display = 'flex';
+            refreshRoomList();
+        });
+
+        socket.on('chatMessage', (msg) => {
+            const container = document.getElementById('lobbyChatMessages');
+            const senderClass = msg.isSpectator ? 'chat-spectator' : 'chat-sender';
+            const div = document.createElement('div');
+            div.className = 'chat-msg';
+            div.innerHTML = `<span class="${senderClass}">${msg.sender}:</span> ${msg.text}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        });
+
+        // Fetch room list on connect
+        socket.on('connect', () => { refreshRoomList(); });
+
         // --- CONSTANTS ---
         const KW_MAP = { "flying": "FLY", "reach": "RCH", "haste": "HST", "deathtouch": "DTH", "hexproof": "HXP", "lifelink": "LFL", "first strike": "FST", "double strike": "DST", "vigilance": "VGL", "trample": "TRP", "menace": "MNC", "indestructible": "IND" };
         const CNTR_MAP = { "time": "TME", "charge": "CRG", "loyalty": "LYT", "poison": "PSN", "stun": "STN", "oil": "OIL", "finality": "FNL", "innovativeness": "INV", "quantity": "QTY" };
@@ -1097,13 +1742,17 @@
 
         // --- SOCKETS ---
         socket.on('playerAssigned', ({ pid }) => {
-            document.getElementById('loadingOverlay').style.display = 'none'; // Hide loading
+            document.getElementById('loadingOverlay').style.display = 'none';
             console.log(`Assigned to seat: ${pid}`);
             myPid = pid;
             document.title = `Arena - ${pid}`;
             viewState.left = pid;
             viewState.right = pid;
-            if (gameState.players.length > 0) renderGame();
+            // If game is already in playing phase, show game immediately
+            if (currentRoomInfo && currentRoomInfo.phase === 'playing') {
+                document.getElementById('roomLobby').style.display = 'none';
+                if (gameState.players.length > 0) renderGame();
+            }
         });
 
         socket.on('stateUpdate', (serverState) => {
@@ -1118,13 +1767,25 @@
         });
 
         socket.on('joinError', (msg) => {
-            document.getElementById('loadingOverlay').style.display = 'none'; // Hide loading
+            document.getElementById('loadingOverlay').style.display = 'none';
             alert(msg);
-            document.getElementById('joinModal').style.display = 'flex';
+            const deckStatusEl = document.getElementById('deckStatus');
+            if (deckStatusEl) deckStatusEl.textContent = '❌ ' + msg;
             myPid = null;
         });
 
-        socket.on('resetClient', () => { location.reload(); });
+        socket.on('resetClient', () => {
+            // Return to lobby
+            currentRoomCode = null;
+            currentRoomInfo = null;
+            isHost = false;
+            myPid = null;
+            gameState = { players: [], isDayTime: true };
+            localImageCache = {};
+            document.getElementById('lobbyOverlay').style.display = 'flex';
+            document.getElementById('roomLobby').style.display = 'none';
+            refreshRoomList();
+        });
         socket.on('updateImageCache', (data) => {
             Object.assign(localImageCache, data);
             renderGame();
@@ -1337,24 +1998,23 @@
             const file = input.files[0];
             if (!file) return;
             const displayName = document.getElementById('displayName').value.trim();
-
-            // Show Loading
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            document.getElementById('joinModal').style.display = 'none';
+            const deckStatusEl = document.getElementById('deckStatus');
+            if (deckStatusEl) deckStatusEl.textContent = 'Loading deck...';
 
             const r = new FileReader();
             r.onload = e => {
                 try {
                     const deckData = JSON.parse(e.target.result);
                     socket.emit('registerPlayer', { deckData, displayName });
+                    if (deckStatusEl) deckStatusEl.textContent = '✅ ' + (deckData.deckName || file.name);
                 } catch (err) {
                     alert("Invalid Deck JSON");
-                    document.getElementById('loadingOverlay').style.display = 'none';
-                    document.getElementById('joinModal').style.display = 'flex';
+                    if (deckStatusEl) deckStatusEl.textContent = '❌ Invalid file';
                 }
             };
             r.readAsText(file);
         }
+
 
         // --- RENDER LOGIC ---
         function renderGame() {
@@ -1628,8 +2288,14 @@
                 el.style.cursor = "default"; el.draggable = false;
             } else if (!imgUrl) {
                 imgUrl = "https://upload.wikimedia.org/wikipedia/en/a/aa/Magic_the_gathering-card_back.jpg";
-            } else {
-                imgUrl = (data.transformed && backImg) ? backImg : frontImg;
+            } else if (data.transformed) {
+                if (backImg) {
+                    imgUrl = backImg; // DFC — use card's own back face
+                } else {
+                    // Non-DFC: use player's custom card back, or Wikipedia default
+                    const playerBack = localImageCache['__cardBack_' + pid];
+                    imgUrl = (playerBack && playerBack.front) || "https://upload.wikimedia.org/wikipedia/en/a/aa/Magic_the_gathering-card_back.jpg";
+                }
             }
 
             el.style.backgroundImage = `url('${imgUrl}')`;
@@ -2095,9 +2761,7 @@
             }
 
             // --- 5. TRANSFORM (F) ---
-            const cached = localImageCache[targetC.uid];
-            const hasBack = cached && cached.back;
-            if (k === 'f' && hasBack) {
+            if (k === 'f') {
                 socket.emit('cardUpdate', { pid: targetP, zone: targetZ, uid: targetC.uid, updates: { transformed: !targetC.transformed } });
             }
 
